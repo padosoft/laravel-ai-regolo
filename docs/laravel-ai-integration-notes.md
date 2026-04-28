@@ -197,10 +197,47 @@ Regolo model-management endpoints (`load_model_for_inference`, `get_loaded_model
 
 ---
 
-## Open questions
+## Open questions (status)
 
-1. Does `laravel/ai` ship a public way to register a provider with embeddings/reranking but NOT chat? (i.e. capability-specific binding keys.) If yes, document the exact key. If no, the package registers `regolo` as a "text" provider and provides static helpers for embeddings/reranking that route directly through our provider classes.
-2. Vercel AI SDK UI streaming protocol — is `usingVercelDataProtocol()` already wired to emit Server-Sent Events in the Vercel format, or does the provider have to format the chunk-frames itself? Empirical test required during W2.A.2.
-3. Conversation persistence (`RemembersConversations` trait + `agent_conversations` table) — does it work cross-provider, or does each provider write/read its own row format? Empirical test required during integration.
+1. ~~Capability-specific binding keys~~ — RESOLVED. The single binding `ai.provider.<name>` is enough; the SDK dispatches to whatever capability interfaces the provider class implements (TextProvider, EmbeddingProvider, RerankingProvider, etc.). Verified against `OllamaProvider` source, which implements both TextProvider + EmbeddingProvider with one binding.
+2. Vercel AI SDK UI streaming protocol — TODO during W2.A.2 implementation.
+3. Conversation persistence — TODO during W2.A.2 implementation.
 
-These three items get resolved during W2.A.2 (Regolo chat driver implementation) by writing actual code against the SDK and observing the resulting behaviour.
+---
+
+## Gateway implementation reference (W2.A.2 + W2.A.3 path)
+
+The `RegoloGateway` class will need to mirror the structure of upstream gateways. Reference: `Laravel\Ai\Gateway\Ollama\OllamaGateway` (4,378 bytes, 3 methods, composes ~9 concern traits).
+
+### Concern traits to study + adapt for Regolo
+
+Each upstream gateway directory ships its own `Concerns/` subdirectory with provider-specific helpers. For OllamaGateway these are:
+
+  - `BuildsTextRequests` — converts SDK message + tool DTOs to provider HTTP body
+  - `CreatesOllamaClient` — instantiates `Http::` client with base URL + auth + timeout
+  - `HandlesTextStreaming` — SSE chunk parsing
+  - `MapsAttachments` — multimodal attachment formatting
+  - `MapsMessages` — role + content shape
+  - `MapsTools` — tool catalog → provider schema
+  - `ParsesTextResponses` — response → `TextResponse` DTO
+
+The package will need a parallel `src/Gateway/Regolo/Concerns/` directory with Regolo-specific versions of each. Given Regolo's OpenAI-compatible chat surface, each Regolo concern can largely be copied from the OpenAI gateway concerns (with base-URL substitution and minor tweaks).
+
+### Endpoint map (Regolo → SDK gateway method)
+
+| SDK gateway method | HTTP endpoint | Body shape | Response DTO |
+|---|---|---|---|
+| `TextGateway::generateText` | `POST /v1/chat/completions` | OpenAI-compatible | `TextResponse` |
+| `TextGateway::streamText` | `POST /v1/chat/completions` with `stream: true` | OpenAI SSE | `Generator<StreamEvent>` |
+| `EmbeddingGateway::generateEmbeddings` | `POST /v1/embeddings` | OpenAI-compatible | `EmbeddingsResponse` |
+| `RerankingGateway::rerank` | `POST /v1/rerank` | Cohere/Jina-style | `RerankingResponse` |
+
+### Implementation order for next session
+
+1. Fetch + read `src/Gateway/OpenAi/OpenAiGateway.php` and `src/Gateway/OpenAi/Concerns/*` — confirm reusability
+2. Fetch + read `src/Responses/TextResponse.php`, `EmbeddingsResponse.php`, `RerankingResponse.php` — confirm DTO shapes
+3. Implement `RegoloGateway::generateText` reusing OpenAI shape
+4. Implement `RegoloGateway::streamText`
+5. Implement `RegoloGateway::generateEmbeddings`
+6. Implement `RegoloGateway::rerank`
+7. Write 40 tests (4 ported from upstream Python SDK + 36 robustness; see `docs/test-coverage-vs-python-sdk.md`)
