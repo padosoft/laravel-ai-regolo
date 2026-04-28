@@ -1,9 +1,9 @@
 {
     "name": "padosoft/laravel-ai-regolo",
-    "description": "Laravel AI SDK provider extension that adds Seeweb Regolo (chat + embeddings + reranking + 30+ open models) and Ollama (local + Cloud) on top of the official laravel/ai SDK.",
+    "description": "Laravel AI SDK provider extension that adds Seeweb Regolo — chat, embeddings, reranking, plus a 30+ open-model catalog hosted in Italy — as a first-class provider for the official laravel/ai SDK.",
     "type": "library",
     "license": "Apache-2.0",
-    "keywords": ["laravel", "ai", "ai-sdk", "llm", "regolo", "seeweb", "ollama", "open-models", "italian-ai", "embeddings", "reranking"],
+    "keywords": ["laravel", "ai", "ai-sdk", "llm", "regolo", "seeweb", "open-models", "italian-ai", "sovereign-cloud", "embeddings", "reranking", "gdpr"],
     "authors": [
         {
             "name": "Lorenzo Padovani",

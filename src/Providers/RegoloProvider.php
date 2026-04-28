@@ -4,43 +4,128 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelAiRegolo\Providers;
 
-use Laravel\Ai\Contracts\Provider;
-use Laravel\Ai\Prompts\AgentPrompt;
-use Laravel\Ai\Responses\AgentResponse;
-use Laravel\Ai\Responses\StreamableAgentResponse;
+use Illuminate\Contracts\Events\Dispatcher;
+use Laravel\Ai\Contracts\Gateway\EmbeddingGateway;
+use Laravel\Ai\Contracts\Gateway\RerankingGateway;
+use Laravel\Ai\Contracts\Gateway\TextGateway;
+use Laravel\Ai\Contracts\Providers\EmbeddingProvider;
+use Laravel\Ai\Contracts\Providers\RerankingProvider;
+use Laravel\Ai\Contracts\Providers\TextProvider;
+use Laravel\Ai\Providers\Concerns\GeneratesEmbeddings;
+use Laravel\Ai\Providers\Concerns\GeneratesText;
+use Laravel\Ai\Providers\Concerns\HasEmbeddingGateway;
+use Laravel\Ai\Providers\Concerns\HasRerankingGateway;
+use Laravel\Ai\Providers\Concerns\HasTextGateway;
+use Laravel\Ai\Providers\Concerns\Reranks;
+use Laravel\Ai\Providers\Concerns\StreamsText;
+use Laravel\Ai\Providers\Provider;
+use Padosoft\LaravelAiRegolo\Gateway\Regolo\RegoloGateway;
 
 /**
  * Regolo (Seeweb) provider for the official `laravel/ai` SDK.
  *
- * Targets `https://api.regolo.ai/v1` (OpenAI-compatible). Authentication
- * is bearer-token via the `REGOLO_API_KEY` env. The catalog of
- * Regolo open models is fetched dynamically from `/v1/models` on first
- * use and cached for the lifetime of the application instance.
+ * Regolo's REST surface is OpenAI-compatible at
+ * `https://api.regolo.ai/v1` for chat completions, embeddings, and
+ * reranking, served from the Italian sovereign cloud (GDPR + AI-Act
+ * friendly hosting). The provider exposes:
  *
- * Implementation lands in W2.A.2. This class currently throws on
- * every call so that early consumers get a clear "not yet
- * implemented" signal rather than a silent no-op.
+ *  - Text generation (chat + streaming) via `TextProvider`
+ *  - Embeddings via `EmbeddingProvider`
+ *  - Reranking via `RerankingProvider`
+ *
+ * Heavy lifting is delegated to {@see RegoloGateway} (HTTP transport)
+ * and the SDK's standard concern traits (request/response shaping,
+ * provider event emission, retry semantics).
+ *
+ * Default models match the upstream Regolo Python SDK so PHP users
+ * get identical out-of-the-box behaviour:
+ *
+ *  - default text:       Llama-3.1-8B-Instruct
+ *  - default embeddings: Qwen3-Embedding-8B
+ *  - default reranking:  jina-reranker-v2
  */
-final class RegoloProvider implements Provider
+final class RegoloProvider extends Provider implements EmbeddingProvider, RerankingProvider, TextProvider
 {
-    public function __construct(
-        private readonly string $apiKey,
-        private readonly string $baseUrl = 'https://api.regolo.ai/v1',
-        private readonly int $timeout = 60,
-    ) {
+    use GeneratesEmbeddings;
+    use GeneratesText;
+    use HasEmbeddingGateway;
+    use HasRerankingGateway;
+    use HasTextGateway;
+    use Reranks;
+    use StreamsText;
+
+    protected ?RegoloGateway $regoloGateway = null;
+
+    public function __construct(protected array $config, protected Dispatcher $events)
+    {
+        // The abstract Provider constructor expects a Gateway instance,
+        // but we resolve it lazily via regoloGateway() so the gateway
+        // is only instantiated when a capability method is actually
+        // invoked. The SDK never calls into the parent constructor's
+        // $gateway property directly — every capability concern routes
+        // through the textGateway() / embeddingGateway() /
+        // rerankingGateway() accessors below.
     }
 
-    public function prompt(AgentPrompt $prompt): AgentResponse
+    public function providerCredentials(): array
     {
-        throw new \LogicException(
-            'RegoloProvider::prompt is not yet implemented. Tracked in W2.A.2.',
+        return [
+            'key' => $this->config['key'] ?? '',
+        ];
+    }
+
+    protected function regoloGateway(): RegoloGateway
+    {
+        return $this->regoloGateway ??= new RegoloGateway(
+            apiKey:  (string) ($this->config['key'] ?? ''),
+            baseUrl: (string) ($this->config['url'] ?? 'https://api.regolo.ai/v1'),
+            timeout: (int) ($this->config['timeout'] ?? 60),
+            events:  $this->events,
         );
     }
 
-    public function stream(AgentPrompt $prompt): StreamableAgentResponse
+    public function textGateway(): TextGateway
     {
-        throw new \LogicException(
-            'RegoloProvider::stream is not yet implemented. Tracked in W2.A.2.',
-        );
+        return $this->textGateway ??= $this->regoloGateway();
+    }
+
+    public function embeddingGateway(): EmbeddingGateway
+    {
+        return $this->embeddingGateway ??= $this->regoloGateway();
+    }
+
+    public function rerankingGateway(): RerankingGateway
+    {
+        return $this->rerankingGateway ??= $this->regoloGateway();
+    }
+
+    public function defaultTextModel(): string
+    {
+        return $this->config['models']['text']['default'] ?? 'Llama-3.1-8B-Instruct';
+    }
+
+    public function cheapestTextModel(): string
+    {
+        return $this->config['models']['text']['cheapest'] ?? 'Llama-3.1-8B-Instruct';
+    }
+
+    public function smartestTextModel(): string
+    {
+        return $this->config['models']['text']['smartest'] ?? 'Llama-3.3-70B-Instruct';
+    }
+
+    public function defaultEmbeddingsModel(): string
+    {
+        return $this->config['models']['embeddings']['default'] ?? 'Qwen3-Embedding-8B';
+    }
+
+    public function defaultEmbeddingsDimensions(): int
+    {
+        return $this->config['models']['embeddings']['dimensions'] ?? 4096;
+    }
+
+    public function defaultRerankingModel(): string
+    {
+        return $this->config['models']['reranking']['default'] ?? 'jina-reranker-v2';
     }
 }

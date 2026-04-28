@@ -8,19 +8,37 @@ This package extends `laravel/ai` (v0.6.4 at time of writing) with two providers
 
 ## SDK architecture (relevant portions)
 
-### Provider contract
+### Provider architecture (corrected after source audit)
+
+The early documentation read of `laravel/ai` suggested a single `Provider` interface with `prompt()` + `stream()`. The actual architecture (verified against `github.com/laravel/ai` `src/`) is layered:
+
+1. **Abstract base** — `Laravel\Ai\Providers\Provider` constructor `(Gateway $gateway, array $config, Dispatcher $events)`. Provides `name()`, `driver()`, `providerCredentials()`, `additionalConfiguration()`, and a `formatProviderAndModelList()` static helper.
+2. **Capability interfaces** — `src/Contracts/Providers/{TextProvider,EmbeddingProvider,RerankingProvider,AudioProvider,ImageProvider,TranscriptionProvider,FileProvider,StoreProvider}.php`. Each declares its own method (e.g. `prompt(AgentPrompt)`, `embeddings(array, ?dim, ?model, timeout)`, `rerank(array, query, ?limit, ?model)`) PLUS gateway accessor/mutator methods PLUS default-model accessors.
+3. **Concern traits** — `src/Providers/Concerns/{GeneratesText,StreamsText,GeneratesEmbeddings,Reranks,GeneratesAudio,GeneratesImages,GeneratesTranscriptions,ManagesFiles,ManagesStores,Has*Gateway}.php`. The traits implement the actual behaviour by calling the gateway.
+4. **Gateway classes** — `src/Gateway/{OpenAi,Anthropic,Gemini,Mistral,Ollama,...}/`. One per provider. Implement multiple `Gateway` interfaces (TextGateway, EmbeddingGateway, RerankingGateway, ...) and own all HTTP transport details.
+
+A custom provider therefore looks like (Ollama core SDK example, paraphrased):
 
 ```php
-namespace Laravel\Ai\Contracts;
-
-interface Provider
+class RegoloProvider extends Provider implements TextProvider, EmbeddingProvider, RerankingProvider
 {
-    public function prompt(AgentPrompt $prompt): AgentResponse;
-    public function stream(AgentPrompt $prompt): StreamableAgentResponse;
+    use GeneratesText, StreamsText;          // implements prompt() + stream()
+    use GeneratesEmbeddings;                 // implements embeddings()
+    use Reranks;                             // implements rerank()
+    use HasTextGateway, HasEmbeddingGateway, HasRerankingGateway;
+
+    protected ?RegoloGateway $regoloGateway = null;
+
+    public function __construct(protected array $config, protected Dispatcher $events) {}
+
+    public function textGateway(): TextGateway { return $this->textGateway ??= $this->regoloGateway(); }
+    public function embeddingGateway(): EmbeddingGateway { return $this->embeddingGateway ??= $this->regoloGateway(); }
+    public function rerankingGateway(): RerankingGateway { return $this->rerankingGateway ??= $this->regoloGateway(); }
+
+    public function defaultTextModel(): string { return 'Llama-3.1-8B-Instruct'; }
+    // ...defaults for embeddings + reranking
 }
 ```
-
-A provider is a class that produces an `AgentResponse` from an `AgentPrompt`. Streaming is a separate method returning an iterator-style `StreamableAgentResponse`.
 
 ### Request DTO — `AgentPrompt`
 
@@ -169,12 +187,13 @@ Regolo model-management endpoints (`load_model_for_inference`, `get_loaded_model
 ## Decisions
 
 1. **Stay in lockstep with `laravel/ai`'s public contracts.** Do not extend its DTOs; if a Regolo-specific feature does not map cleanly, expose it via `AgentPrompt::$providerOptions` and document the keys in the README.
-2. **One provider class per capability** — `RegoloProvider` (text + stream), `RegoloEmbeddingsProvider`, `RegoloRerankingProvider`, plus `OllamaProvider` and `OllamaEmbeddingsProvider`. Avoids God-classes and matches the SDK's binding key shape `ai.provider.<name>` naturally.
-3. **Transport** — `illuminate/http` only. No third-party SDK.
-4. **Streaming** — yield `StreamEvent` instances from a `Generator` inside `StreamableAgentResponse`. Implement `usingVercelDataProtocol()` so AskMyDocs's W3 frontend migration to `@ai-sdk/react` works out of the box.
-5. **ReAct fallback for tool calls** when the underlying Regolo open model lacks native function calling. The wrapper detects support based on the `/v1/models` metadata at startup; per-request override available via `providerOptions['toolCallStrategy' => 'react'|'native'|'auto']`.
-6. **Auth** — `Bearer ${REGOLO_API_KEY}` for Regolo; `Bearer ${OLLAMA_CLOUD_KEY}` for Ollama Cloud; no auth for local Ollama.
-7. **Defaults** match the upstream Python SDK (`Llama-3.1-8B-Instruct`, `Qwen3-Embedding-8B`, `jina-reranker-v2`) so PHP users get parity with Python users out of the box.
+2. **Single `RegoloProvider` class implementing all three capability interfaces** (`TextProvider` + `EmbeddingProvider` + `RerankingProvider`). One gateway (`RegoloGateway`) that implements `TextGateway` + `EmbeddingGateway` + `RerankingGateway` and owns all HTTP transport. This matches the upstream Ollama / OpenAI / Cohere shape — single binding key `ai.provider.regolo`.
+3. **Ollama is dropped from this package** — `laravel/ai` ships `Laravel\Ai\Providers\OllamaProvider` and `Laravel\Ai\Gateway\Ollama\OllamaGateway` first-class. Shadowing them would create maintenance debt and break compatibility when upstream Ollama support evolves. Users who want Ollama configure it directly against the upstream driver.
+4. **Transport** — `illuminate/http` only. No third-party SDK.
+5. **Streaming** — yield `StreamEvent` instances from a `Generator` inside `StreamableAgentResponse` via the SDK's `StreamsText` concern. Verify that `usingVercelDataProtocol()` works out of the box for AskMyDocs's W3 frontend migration to `@ai-sdk/react`.
+6. **ReAct fallback for tool calls** when the underlying Regolo open model lacks native function calling. The wrapper detects support based on the `/v1/models` metadata at startup; per-request override available via `providerOptions['toolCallStrategy' => 'react'|'native'|'auto']`.
+7. **Auth** — `Bearer ${REGOLO_API_KEY}`.
+8. **Defaults** match the upstream Python SDK (`Llama-3.1-8B-Instruct`, `Qwen3-Embedding-8B`, `jina-reranker-v2`) so PHP users get parity with Python users out of the box.
 
 ---
 
