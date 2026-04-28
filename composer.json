@@ -1,9 +1,9 @@
 {
-    "name": "padosoft/agent-llm",
-    "description": "Laravel-native agentic LLM SDK with 6 providers (OpenAI, Anthropic, Gemini, OpenRouter, Regolo, Ollama)",
+    "name": "padosoft/laravel-ai-regolo",
+    "description": "Laravel AI SDK provider extension that adds Seeweb Regolo (chat + embeddings + reranking + 30+ open models) and Ollama (local + Cloud) on top of the official laravel/ai SDK.",
     "type": "library",
     "license": "Apache-2.0",
-    "keywords": ["laravel", "ai", "llm", "agentic", "openai", "anthropic", "gemini", "regolo", "ollama"],
+    "keywords": ["laravel", "ai", "ai-sdk", "llm", "regolo", "seeweb", "ollama", "open-models", "italian-ai", "embeddings", "reranking"],
     "authors": [
         {
             "name": "Lorenzo Padovani",
@@ -16,25 +16,25 @@
         "illuminate/http": "^11.0|^12.0|^13.0"
     },
     "require-dev": {
-        "phpunit/phpunit": "^11.0",
+        "phpunit/phpunit": "^11.0|^12.0",
         "phpstan/phpstan": "^2.0",
         "laravel/pint": "^1.18",
         "orchestra/testbench": "^9.0|^10.0|^11.0"
     },
     "autoload": {
         "psr-4": {
-            "Padosoft\\AgentLlm\\": "src/"
+            "Padosoft\\LaravelAiRegolo\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Padosoft\\AgentLlm\\Tests\\": "tests/"
+            "Padosoft\\LaravelAiRegolo\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Padosoft\\AgentLlm\\AgentLlmServiceProvider"
+                "Padosoft\\LaravelAiRegolo\\LaravelAiRegoloServiceProvider"
             ]
         }
     },
