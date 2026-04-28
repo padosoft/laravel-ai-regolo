@@ -11,7 +11,7 @@
   <a href="https://packagist.org/packages/padosoft/laravel-ai-regolo"><img alt="Total downloads" src="https://img.shields.io/packagist/dt/padosoft/laravel-ai-regolo.svg?label=downloads"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue.svg"></a>
   <img alt="PHP version" src="https://img.shields.io/badge/php-8.3%20%7C%208.4%20%7C%208.5-777BB4">
-  <img alt="Laravel version" src="https://img.shields.io/badge/laravel-11%20%7C%2012%20%7C%2013-FF2D20">
+  <img alt="Laravel version" src="https://img.shields.io/badge/laravel-12%20%7C%2013-FF2D20">
   <a href="https://github.com/padosoft/laravel-ai-regolo/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/padosoft/laravel-ai-regolo"></a>
 </p>
 
@@ -85,7 +85,7 @@ The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or an
 - **Open-model catalog** with Italian sovereign hosting (Llama-3.x, Qwen-3, Mistral, Gemma, Phi, DeepSeek, more).
 - **Tool calling** — native function calling on models that support it; ReAct-style fallback on those that don't.
 - **Strict typing** — PHP 8.3+, readonly DTOs, fully-typed signatures, Pint-formatted, PHPStan level 6.
-- **CI matrix** — every push runs against PHP 8.3 / 8.4 / 8.5 × Laravel 11 / 12 / 13 (9 jobs).
+- **CI matrix** — every push runs against PHP 8.3 / 8.4 / 8.5 × Laravel 12 / 13 (6 jobs). Laravel 11 is **not supported** — `laravel/ai` itself requires `illuminate/support: ^12.0|^13.0`.
 - **47 unit tests / 100 assertions** — every Python-SDK happy-path is ported, plus 36 robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn).
 
 ## Comparison vs alternatives
@@ -376,7 +376,7 @@ Coverage breakdown:
 
 The test inventory and the rationale for each robustness scenario is documented in [`docs/test-coverage-vs-python-sdk.md`](docs/test-coverage-vs-python-sdk.md).
 
-CI matrix: PHP 8.3 / 8.4 / 8.5 × Laravel 11 / 12 / 13 (9 cells), plus a separate static-analysis job that runs PHPStan and Pint.
+CI matrix: PHP 8.3 / 8.4 / 8.5 × Laravel 12 / 13 (6 cells — Laravel 11 is unsupported because the upstream `laravel/ai` SDK itself requires `illuminate/support: ^12.0|^13.0`), plus a separate static-analysis job that runs PHPStan and Pint.
 
 ## Roadmap
 
