@@ -59,12 +59,12 @@ final class RegoloProvider extends Provider implements EmbeddingProvider, Rerank
     public function __construct(protected array $config, protected Dispatcher $events)
     {
         // The abstract Provider constructor expects a Gateway instance,
-        // but we resolve it lazily via regoloGateway() so the gateway
-        // is only instantiated when a capability method is actually
-        // invoked. The SDK never calls into the parent constructor's
-        // $gateway property directly — every capability concern routes
-        // through the textGateway() / embeddingGateway() /
-        // rerankingGateway() accessors below.
+        // but the SDK pattern (used by MistralProvider, OllamaProvider,
+        // OpenRouterProvider, ...) is to resolve the gateway lazily via
+        // a typed accessor below. The SDK never calls into the parent
+        // constructor's $gateway property directly — every capability
+        // concern routes through the textGateway() / embeddingGateway()
+        // / rerankingGateway() accessors below.
     }
 
     public function providerCredentials(): array
@@ -76,12 +76,13 @@ final class RegoloProvider extends Provider implements EmbeddingProvider, Rerank
 
     protected function regoloGateway(): RegoloGateway
     {
-        return $this->regoloGateway ??= new RegoloGateway(
-            apiKey:  (string) ($this->config['key'] ?? ''),
-            baseUrl: (string) ($this->config['url'] ?? 'https://api.regolo.ai/v1'),
-            timeout: (int) ($this->config['timeout'] ?? 60),
-            events:  $this->events,
-        );
+        // Mirrors the upstream MistralProvider / OllamaProvider pattern:
+        // the gateway is stateless w.r.t. credentials and base URL — it
+        // reads both from the Provider passed to each gateway method via
+        // $provider->providerCredentials() and
+        // $provider->additionalConfiguration()['url']. Only the events
+        // dispatcher is gateway state.
+        return $this->regoloGateway ??= new RegoloGateway($this->events);
     }
 
     public function textGateway(): TextGateway
