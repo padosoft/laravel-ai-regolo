@@ -7,7 +7,7 @@
     "authors": [
         {
             "name": "Lorenzo Padovani",
-            "email": "lorenzo.padovani@gmail.com"
+            "email": "lorenzo.padovani@padosoft.com"
         }
     ],
     "require": {
@@ -23,18 +23,18 @@
     },
     "autoload": {
         "psr-4": {
-            "Lopadova\\AgentLlm\\": "src/"
+            "Padosoft\\AgentLlm\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Lopadova\\AgentLlm\\Tests\\": "tests/"
+            "Padosoft\\AgentLlm\\Tests\\": "tests/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Lopadova\\AgentLlm\\AgentLlmServiceProvider"
+                "Padosoft\\AgentLlm\\AgentLlmServiceProvider"
             ]
         }
     },

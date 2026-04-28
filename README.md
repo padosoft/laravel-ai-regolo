@@ -21,7 +21,7 @@ composer require padosoft/agent-llm
 ## Quick start
 
 ```php
-use Lopadova\AgentLlm\Facades\AgentLlm;
+use Padosoft\AgentLlm\Facades\AgentLlm;
 
 $response = AgentLlm::driver('anthropic')
     ->chat([
