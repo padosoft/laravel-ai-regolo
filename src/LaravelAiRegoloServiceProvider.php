@@ -28,8 +28,8 @@ final class LaravelAiRegoloServiceProvider extends ServiceProvider
     {
         $this->app->bind('ai.provider.regolo', function ($app) {
             return new RegoloProvider(
-                config:  (array) config('ai.providers.regolo', []),
-                events:  $app->make('events'),
+                config: (array) config('ai.providers.regolo', []),
+                events: $app->make('events'),
             );
         });
     }

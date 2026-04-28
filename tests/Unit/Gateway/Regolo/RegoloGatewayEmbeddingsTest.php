@@ -6,6 +6,7 @@ namespace Padosoft\LaravelAiRegolo\Tests\Unit\Gateway\Regolo;
 
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
@@ -27,54 +28,6 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  */
 final class RegoloGatewayEmbeddingsTest extends TestCase
 {
-    /**
-     * @return array<int, class-string>
-     */
-    protected function getPackageProviders($app): array
-    {
-        return [LaravelAiRegoloServiceProvider::class];
-    }
-
-    private function makeProvider(array $configOverride = []): RegoloProvider
-    {
-        $config = array_merge([
-            'driver' => 'regolo',
-            'name' => 'regolo',
-            'key' => 'test-api-key',
-            'url' => 'https://api.regolo.test/v1',
-            'models' => [
-                'text' => ['default' => 'Llama-3.1-8B-Instruct'],
-                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
-            ],
-        ], $configOverride);
-
-        return new RegoloProvider($config, $this->app->make('events'));
-    }
-
-    private function embeddingsFixture(int $count, int $dim = 4, string $model = 'Qwen3-Embedding-8B', int $totalTokens = 17): array
-    {
-        $data = [];
-        for ($i = 0; $i < $count; $i++) {
-            $vector = [];
-            for ($d = 0; $d < $dim; $d++) {
-                $vector[] = round(0.1 * ($i + 1) + 0.01 * $d, 4);
-            }
-            $data[] = [
-                'object' => 'embedding',
-                'index' => $i,
-                'embedding' => $vector,
-            ];
-        }
-
-        return [
-            'object' => 'list',
-            'data' => $data,
-            'model' => $model,
-            'usage' => ['prompt_tokens' => $totalTokens, 'total_tokens' => $totalTokens],
-        ];
-    }
-
     /**
      * Port of Python: regolo-ai/python-client tests/test.py::test_static_embeddings
      *
@@ -105,6 +58,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
 
         Http::assertSent(function (Request $request) {
             $body = $request->data();
+
             return str_ends_with($request->url(), '/embeddings')
                 && $body['model'] === 'Qwen3-Embedding-8B'
                 && $body['input'] === ['hello', 'world'];
@@ -248,7 +202,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $gateway->generateEmbeddings(
             $this->makeProvider(),
@@ -271,7 +225,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $gateway->generateEmbeddings(
             $this->makeProvider(),
@@ -341,5 +295,53 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
             ['timeout'],
             4096,
         );
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getPackageProviders($app): array
+    {
+        return [LaravelAiRegoloServiceProvider::class];
+    }
+
+    private function makeProvider(array $configOverride = []): RegoloProvider
+    {
+        $config = array_merge([
+            'driver' => 'regolo',
+            'name' => 'regolo',
+            'key' => 'test-api-key',
+            'url' => 'https://api.regolo.test/v1',
+            'models' => [
+                'text' => ['default' => 'Llama-3.1-8B-Instruct'],
+                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
+                'reranking' => ['default' => 'jina-reranker-v2'],
+            ],
+        ], $configOverride);
+
+        return new RegoloProvider($config, $this->app->make('events'));
+    }
+
+    private function embeddingsFixture(int $count, int $dim = 4, string $model = 'Qwen3-Embedding-8B', int $totalTokens = 17): array
+    {
+        $data = [];
+        for ($i = 0; $i < $count; $i++) {
+            $vector = [];
+            for ($d = 0; $d < $dim; $d++) {
+                $vector[] = round(0.1 * ($i + 1) + 0.01 * $d, 4);
+            }
+            $data[] = [
+                'object' => 'embedding',
+                'index' => $i,
+                'embedding' => $vector,
+            ];
+        }
+
+        return [
+            'object' => 'list',
+            'data' => $data,
+            'model' => $model,
+            'usage' => ['prompt_tokens' => $totalTokens, 'total_tokens' => $totalTokens],
+        ];
     }
 }

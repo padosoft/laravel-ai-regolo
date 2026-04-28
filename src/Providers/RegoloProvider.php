@@ -74,17 +74,6 @@ final class RegoloProvider extends Provider implements EmbeddingProvider, Rerank
         ];
     }
 
-    protected function regoloGateway(): RegoloGateway
-    {
-        // Mirrors the upstream MistralProvider / OllamaProvider pattern:
-        // the gateway is stateless w.r.t. credentials and base URL — it
-        // reads both from the Provider passed to each gateway method via
-        // $provider->providerCredentials() and
-        // $provider->additionalConfiguration()['url']. Only the events
-        // dispatcher is gateway state.
-        return $this->regoloGateway ??= new RegoloGateway($this->events);
-    }
-
     public function textGateway(): TextGateway
     {
         return $this->textGateway ??= $this->regoloGateway();
@@ -128,5 +117,16 @@ final class RegoloProvider extends Provider implements EmbeddingProvider, Rerank
     public function defaultRerankingModel(): string
     {
         return $this->config['models']['reranking']['default'] ?? 'jina-reranker-v2';
+    }
+
+    protected function regoloGateway(): RegoloGateway
+    {
+        // Mirrors the upstream MistralProvider / OllamaProvider pattern:
+        // the gateway is stateless w.r.t. credentials and base URL — it
+        // reads both from the Provider passed to each gateway method via
+        // $provider->providerCredentials() and
+        // $provider->additionalConfiguration()['url']. Only the events
+        // dispatcher is gateway state.
+        return $this->regoloGateway ??= new RegoloGateway($this->events);
     }
 }
