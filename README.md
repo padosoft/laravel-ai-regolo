@@ -75,7 +75,7 @@ The upstream `OpenAiGateway` targets OpenAI's newer Responses API (`POST /v1/res
 
 ### 4. Standalone, agnostic
 
-The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or any sister package. It works in any Laravel 11 / 12 / 13 application that has `laravel/ai` installed. The reverse is true too: `lopadova/askmydocs` and `padosoft/askmydocs-pro` consume this package, never the inverse.
+The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or any sister package. It works in any Laravel 12 or 13 application that has `laravel/ai` installed (Laravel 11 is unsupported — see the [Comparison vs alternatives](#comparison-vs-alternatives) note). The reverse is true too: `lopadova/askmydocs` and `padosoft/askmydocs-pro` consume this package, never the inverse.
 
 ## Features at a glance
 
