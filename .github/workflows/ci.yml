@@ -11,29 +11,40 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
-        php: ['8.3', '8.4']
+        php: ['8.3', '8.4', '8.5']
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup PHP
+      - name: Setup PHP ${{ matrix.php }}
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
           coverage: xdebug
           tools: composer:v2
 
+      - name: Validate composer.json
+        run: composer validate --strict
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ matrix.php }}-${{ hashFiles('composer.json') }}
+          restore-keys: composer-${{ matrix.php }}-
+
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: composer install --prefer-dist --no-progress --no-interaction
 
       - name: Run PHPStan
         run: vendor/bin/phpstan analyse --memory-limit=512M
         continue-on-error: true
 
-      - name: Run Pint
+      - name: Run Pint (code style check)
         run: vendor/bin/pint --test
         continue-on-error: true
 
-      - name: Run tests
+      - name: Run PHPUnit
         run: vendor/bin/phpunit --coverage-text
