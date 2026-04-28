@@ -5,36 +5,48 @@ declare(strict_types=1);
 namespace Padosoft\LaravelAiRegolo;
 
 use Illuminate\Support\ServiceProvider;
+use Padosoft\LaravelAiRegolo\Providers\OllamaProvider;
+use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
 
 /**
- * LaravelAiRegoloServiceProvider — skeleton service provider for v0.0.1 scaffold.
+ * Service provider that registers Regolo + Ollama providers with the
+ * official `laravel/ai` SDK.
  *
- * Implementation will follow during v4.0 development. For now this is
- * an empty no-op so Laravel package auto-discovery does not fail with
- * "Class not found" when a host application requires the package via
- * a path repository.
+ * Both bindings expose the SDK's expected key shape
+ * `ai.provider.<name>` so the SDK's resolver picks them up when the
+ * application calls `Agent::prompt(...)` (or any of the capability
+ * facades) with a `Lab::Custom('regolo')` / `'regolo'` argument or a
+ * default declared in `config/ai.php`.
  *
- * Scope (Padosoft v4.0 W2):
- *  - Adds Seeweb Regolo as a provider for the official laravel/ai SDK
- *    (chat, embeddings, reranking, ReAct-style tool calls)
- *  - Adds the Regolo open-model catalog (30+ models not covered by the
- *    standard providers in laravel/ai)
- *  - Adds Ollama (local + Cloud) as a provider
- *
- * This package is an EXTENSION of the official laravel/ai SDK, not a
- * replacement. Users register laravel/ai for OpenAI/Anthropic/Gemini/
- * OpenRouter/Mistral/Groq/Cohere/Perplexity/Workers AI, then add this
- * package to also use Regolo + Ollama through the same unified API.
+ * The provider classes themselves are skeletons during W2.A.1; the
+ * implementation of `prompt` / `stream` lands in W2.A.2 (Regolo) and
+ * W2.A.4 (Ollama). Embeddings + reranking providers will register
+ * additional bindings during W2.A.3.
  */
 final class LaravelAiRegoloServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        // Bindings will be added during v4.0 development.
+        $this->app->singleton(RegoloProvider::class, fn () => new RegoloProvider(
+            apiKey:  (string) config('ai.providers.regolo.key', ''),
+            baseUrl: (string) config('ai.providers.regolo.url', 'https://api.regolo.ai/v1'),
+            timeout: (int) config('ai.providers.regolo.timeout', 60),
+        ));
+
+        $this->app->singleton(OllamaProvider::class, fn () => new OllamaProvider(
+            baseUrl:  (string) config('ai.providers.ollama.url', 'http://localhost:11434'),
+            cloudKey: config('ai.providers.ollama.cloud_key'),
+            timeout:  (int) config('ai.providers.ollama.timeout', 60),
+        ));
+
+        $this->app->bind('ai.provider.regolo', RegoloProvider::class);
+        $this->app->bind('ai.provider.ollama', OllamaProvider::class);
     }
 
     public function boot(): void
     {
-        // Bootstrapping will be added during v4.0 development.
+        // Bootstrapping (config publishing, route registration) lands
+        // in W2.A.5 alongside the embeddings / reranking provider
+        // registrations.
     }
 }
