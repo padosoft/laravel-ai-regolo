@@ -17,6 +17,7 @@ use Laravel\Ai\Gateway\Concerns\HandlesFailoverErrors;
 use Laravel\Ai\Gateway\Concerns\InvokesTools;
 use Laravel\Ai\Gateway\Concerns\ParsesServerSentEvents;
 use Laravel\Ai\Gateway\TextGenerationOptions;
+use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\RankedDocument;
 use Laravel\Ai\Responses\EmbeddingsResponse;
@@ -34,7 +35,7 @@ use Laravel\Ai\Responses\TextResponse;
  * capability.
  *
  * The gateway is stateless w.r.t. credentials and base URL — both are
- * read from the {@see \Laravel\Ai\Providers\Provider} argument on each
+ * read from the {@see Provider} argument on each
  * call via `providerCredentials()['key']` and
  * `additionalConfiguration()['url']`. This matches the upstream
  * MistralGateway / OllamaGateway / OpenRouterGateway pattern and lets

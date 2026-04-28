@@ -4,17 +4,18 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelAiRegolo\Tests\Unit\Gateway\Regolo;
 
-use Generator;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Exceptions\AiException;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Gateway\TextGenerationOptions;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
-use Laravel\Ai\Messages\MessageRole;
 use Laravel\Ai\Messages\UserMessage;
+use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Streaming\Events\StreamEnd;
 use Laravel\Ai\Streaming\Events\StreamStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
@@ -48,105 +49,6 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  */
 final class RegoloGatewayChatTest extends TestCase
 {
-    /**
-     * @return array<int, class-string>
-     */
-    protected function getPackageProviders($app): array
-    {
-        return [LaravelAiRegoloServiceProvider::class];
-    }
-
-    private function makeProvider(array $configOverride = []): RegoloProvider
-    {
-        $config = array_merge([
-            'driver' => 'regolo',
-            'name' => 'regolo',
-            'key' => 'test-api-key',
-            'url' => 'https://api.regolo.test/v1',
-            'models' => [
-                'text' => [
-                    'default' => 'Llama-3.1-8B-Instruct',
-                    'cheapest' => 'Llama-3.1-8B-Instruct',
-                    'smartest' => 'Llama-3.3-70B-Instruct',
-                ],
-                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
-            ],
-        ], $configOverride);
-
-        return new RegoloProvider($config, $this->app->make('events'));
-    }
-
-    private function chatCompletionFixture(string $text = 'Ciao!', int $promptTokens = 12, int $completionTokens = 5, string $finishReason = 'stop', string $model = 'Llama-3.1-8B-Instruct'): array
-    {
-        return [
-            'id' => 'chatcmpl-regolo-test',
-            'object' => 'chat.completion',
-            'created' => 1745846400,
-            'model' => $model,
-            'choices' => [
-                [
-                    'index' => 0,
-                    'message' => ['role' => 'assistant', 'content' => $text],
-                    'finish_reason' => $finishReason,
-                ],
-            ],
-            'usage' => [
-                'prompt_tokens' => $promptTokens,
-                'completion_tokens' => $completionTokens,
-                'total_tokens' => $promptTokens + $completionTokens,
-            ],
-        ];
-    }
-
-    private function buildSseBody(array $deltas, string $finishReason = 'stop', ?array $usage = null, string $model = 'Llama-3.1-8B-Instruct'): string
-    {
-        $lines = [];
-
-        foreach ($deltas as $i => $delta) {
-            $chunk = [
-                'id' => 'chatcmpl-stream-test',
-                'object' => 'chat.completion.chunk',
-                'created' => 1745846400,
-                'model' => $model,
-                'choices' => [
-                    [
-                        'index' => 0,
-                        'delta' => ['content' => $delta],
-                        'finish_reason' => null,
-                    ],
-                ],
-            ];
-            $lines[] = 'data: '.json_encode($chunk);
-            $lines[] = '';
-        }
-
-        $finalChunk = [
-            'id' => 'chatcmpl-stream-test',
-            'object' => 'chat.completion.chunk',
-            'created' => 1745846400,
-            'model' => $model,
-            'choices' => [
-                [
-                    'index' => 0,
-                    'delta' => [],
-                    'finish_reason' => $finishReason,
-                ],
-            ],
-        ];
-
-        if ($usage) {
-            $finalChunk['usage'] = $usage;
-        }
-
-        $lines[] = 'data: '.json_encode($finalChunk);
-        $lines[] = '';
-        $lines[] = 'data: [DONE]';
-        $lines[] = '';
-
-        return implode("\n", $lines);
-    }
-
     /**
      * Port of Python: regolo-ai/python-client tests/test.py::test_completions
      *
@@ -204,6 +106,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         Http::assertSent(function (Request $request) {
             $body = $request->data();
+
             return str_ends_with($request->url(), '/chat/completions')
                 && $body['model'] === 'Llama-3.1-8B-Instruct'
                 && count($body['messages']) === 4
@@ -324,7 +227,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $gateway->generateText(
             $this->makeProvider(),
@@ -348,7 +251,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $gateway->generateText(
             $this->makeProvider(),
@@ -387,7 +290,7 @@ final class RegoloGatewayChatTest extends TestCase
                 null,
                 [new UserMessage('Will fail')],
             );
-        } catch (\Illuminate\Http\Client\RequestException $e) {
+        } catch (RequestException $e) {
             $exception = $e;
         }
 
@@ -501,6 +404,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         Http::assertSent(function (Request $request) {
             $messages = $request->data()['messages'];
+
             return count($messages) === 6
                 && $messages[0]['role'] === 'system'
                 && $messages[1]['content'] === 'domanda 1'
@@ -624,7 +528,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $options = new \Laravel\Ai\Gateway\TextGenerationOptions(
+        $options = new TextGenerationOptions(
             maxTokens: 256,
             temperature: 0.42,
         );
@@ -639,6 +543,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         Http::assertSent(function (Request $request) {
             $body = $request->data();
+
             return $body['max_tokens'] === 256
                 && $body['temperature'] === 0.42;
         });
@@ -682,6 +587,105 @@ final class RegoloGatewayChatTest extends TestCase
         );
 
         $this->assertSame('truncated', $response->text);
-        $this->assertSame(\Laravel\Ai\Responses\Data\FinishReason::Length, $response->steps->first()->finishReason);
+        $this->assertSame(FinishReason::Length, $response->steps->first()->finishReason);
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getPackageProviders($app): array
+    {
+        return [LaravelAiRegoloServiceProvider::class];
+    }
+
+    private function makeProvider(array $configOverride = []): RegoloProvider
+    {
+        $config = array_merge([
+            'driver' => 'regolo',
+            'name' => 'regolo',
+            'key' => 'test-api-key',
+            'url' => 'https://api.regolo.test/v1',
+            'models' => [
+                'text' => [
+                    'default' => 'Llama-3.1-8B-Instruct',
+                    'cheapest' => 'Llama-3.1-8B-Instruct',
+                    'smartest' => 'Llama-3.3-70B-Instruct',
+                ],
+                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
+                'reranking' => ['default' => 'jina-reranker-v2'],
+            ],
+        ], $configOverride);
+
+        return new RegoloProvider($config, $this->app->make('events'));
+    }
+
+    private function chatCompletionFixture(string $text = 'Ciao!', int $promptTokens = 12, int $completionTokens = 5, string $finishReason = 'stop', string $model = 'Llama-3.1-8B-Instruct'): array
+    {
+        return [
+            'id' => 'chatcmpl-regolo-test',
+            'object' => 'chat.completion',
+            'created' => 1745846400,
+            'model' => $model,
+            'choices' => [
+                [
+                    'index' => 0,
+                    'message' => ['role' => 'assistant', 'content' => $text],
+                    'finish_reason' => $finishReason,
+                ],
+            ],
+            'usage' => [
+                'prompt_tokens' => $promptTokens,
+                'completion_tokens' => $completionTokens,
+                'total_tokens' => $promptTokens + $completionTokens,
+            ],
+        ];
+    }
+
+    private function buildSseBody(array $deltas, string $finishReason = 'stop', ?array $usage = null, string $model = 'Llama-3.1-8B-Instruct'): string
+    {
+        $lines = [];
+
+        foreach ($deltas as $i => $delta) {
+            $chunk = [
+                'id' => 'chatcmpl-stream-test',
+                'object' => 'chat.completion.chunk',
+                'created' => 1745846400,
+                'model' => $model,
+                'choices' => [
+                    [
+                        'index' => 0,
+                        'delta' => ['content' => $delta],
+                        'finish_reason' => null,
+                    ],
+                ],
+            ];
+            $lines[] = 'data: '.json_encode($chunk);
+            $lines[] = '';
+        }
+
+        $finalChunk = [
+            'id' => 'chatcmpl-stream-test',
+            'object' => 'chat.completion.chunk',
+            'created' => 1745846400,
+            'model' => $model,
+            'choices' => [
+                [
+                    'index' => 0,
+                    'delta' => [],
+                    'finish_reason' => $finishReason,
+                ],
+            ],
+        ];
+
+        if ($usage) {
+            $finalChunk['usage'] = $usage;
+        }
+
+        $lines[] = 'data: '.json_encode($finalChunk);
+        $lines[] = '';
+        $lines[] = 'data: [DONE]';
+        $lines[] = '';
+
+        return implode("\n", $lines);
     }
 }

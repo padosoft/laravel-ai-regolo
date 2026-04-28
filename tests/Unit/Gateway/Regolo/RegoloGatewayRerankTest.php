@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Padosoft\LaravelAiRegolo\Tests\Unit\Gateway\Regolo;
 
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
@@ -30,50 +31,6 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  */
 final class RegoloGatewayRerankTest extends TestCase
 {
-    /**
-     * @return array<int, class-string>
-     */
-    protected function getPackageProviders($app): array
-    {
-        return [LaravelAiRegoloServiceProvider::class];
-    }
-
-    private function makeProvider(array $configOverride = []): RegoloProvider
-    {
-        $config = array_merge([
-            'driver' => 'regolo',
-            'name' => 'regolo',
-            'key' => 'test-api-key',
-            'url' => 'https://api.regolo.test/v1',
-            'models' => [
-                'text' => ['default' => 'Llama-3.1-8B-Instruct'],
-                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
-            ],
-        ], $configOverride);
-
-        return new RegoloProvider($config, $this->app->make('events'));
-    }
-
-    /**
-     * Build a Cohere/Jina-style rerank response.
-     *
-     * @param  array<array{index:int, score:float}>  $rankings  results in the wire order the Regolo API would return
-     * @param  string  $model  echoed model identifier
-     */
-    private function rerankFixture(array $rankings, string $model = 'jina-reranker-v2'): array
-    {
-        return [
-            'id' => 'rerank-test',
-            'model' => $model,
-            'results' => array_map(fn (array $r) => [
-                'index' => $r['index'],
-                'relevance_score' => $r['score'],
-            ], $rankings),
-            'meta' => ['billed_units' => ['search_units' => count($rankings)]],
-        ];
-    }
-
     /**
      * Port of Python: regolo-ai/python-client tests/test.py::test_rerank
      *
@@ -110,6 +67,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         Http::assertSent(function (Request $request) use ($documents) {
             $body = $request->data();
+
             return str_ends_with($request->url(), '/rerank')
                 && $body['model'] === 'jina-reranker-v2'
                 && $body['query'] === 'Quale città è la capitale italiana?'
@@ -322,7 +280,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $gateway->rerank(
             $this->makeProvider(),
@@ -345,7 +303,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(\Illuminate\Http\Client\RequestException::class);
+        $this->expectException(RequestException::class);
 
         $gateway->rerank(
             $this->makeProvider(),
@@ -397,5 +355,49 @@ final class RegoloGatewayRerankTest extends TestCase
             ['busy'],
             'q',
         );
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getPackageProviders($app): array
+    {
+        return [LaravelAiRegoloServiceProvider::class];
+    }
+
+    private function makeProvider(array $configOverride = []): RegoloProvider
+    {
+        $config = array_merge([
+            'driver' => 'regolo',
+            'name' => 'regolo',
+            'key' => 'test-api-key',
+            'url' => 'https://api.regolo.test/v1',
+            'models' => [
+                'text' => ['default' => 'Llama-3.1-8B-Instruct'],
+                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
+                'reranking' => ['default' => 'jina-reranker-v2'],
+            ],
+        ], $configOverride);
+
+        return new RegoloProvider($config, $this->app->make('events'));
+    }
+
+    /**
+     * Build a Cohere/Jina-style rerank response.
+     *
+     * @param  array<array{index:int, score:float}>  $rankings  results in the wire order the Regolo API would return
+     * @param  string  $model  echoed model identifier
+     */
+    private function rerankFixture(array $rankings, string $model = 'jina-reranker-v2'): array
+    {
+        return [
+            'id' => 'rerank-test',
+            'model' => $model,
+            'results' => array_map(fn (array $r) => [
+                'index' => $r['index'],
+                'relevance_score' => $r['score'],
+            ], $rankings),
+            'meta' => ['billed_units' => ['search_units' => count($rankings)]],
+        ];
     }
 }

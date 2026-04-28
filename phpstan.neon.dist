@@ -1,0 +1,27 @@
+parameters:
+    level: 5
+    paths:
+        - src
+    treatPhpDocTypesAsCertain: false
+    ignoreErrors:
+        # The capability interfaces (TextProvider, EmbeddingProvider,
+        # RerankingProvider) are guaranteed to be implemented by a class
+        # extending the abstract Provider — that is the SDK's contract.
+        # PHPStan cannot follow the registry-binding flow that hands the
+        # interface-typed argument to a Provider-typed concern.
+        - identifier: argument.type
+          message: '#expects Laravel\\Ai\\Providers\\Provider, Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking)Provider given#'
+          path: src/Gateway/Regolo/*
+
+        # name() / driver() are declared on the abstract Provider, not on
+        # the capability interfaces — same registry-flow argument as above.
+        - identifier: method.notFound
+          message: '#Call to an undefined method Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking)Provider::name\(\)#'
+          path: src/Gateway/Regolo/*
+
+        # Upstream Mistral concern keeps a `!== null` guard on a typed
+        # property the SDK widens to `mixed` in PHPDoc only — the runtime
+        # value is unambiguous, the static check is the false positive.
+        - identifier: notIdentical.alwaysTrue
+          message: '#Strict comparison using !== between mixed and null will always evaluate to true#'
+          path: src/Gateway/Regolo/Concerns/HandlesTextStreaming.php
