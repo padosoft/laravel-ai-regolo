@@ -207,37 +207,64 @@ Regolo model-management endpoints (`load_model_for_inference`, `get_loaded_model
 
 ## Gateway implementation reference (W2.A.2 + W2.A.3 path)
 
-The `RegoloGateway` class will need to mirror the structure of upstream gateways. Reference: `Laravel\Ai\Gateway\Ollama\OllamaGateway` (4,378 bytes, 3 methods, composes ~9 concern traits).
+### Template selection — Mistral, NOT OpenAi (corrected after vendor source audit)
 
-### Concern traits to study + adapt for Regolo
+A vendor source audit on 2026-04-29 invalidated the prior assumption that `OpenAiGateway` would be the closest template for Regolo. The upstream `Laravel\Ai\Gateway\OpenAi\OpenAiGateway` posts to the **Responses API endpoint** (`POST /v1/responses`, OpenAI's newer agentic surface), not to `/v1/chat/completions`. Regolo runs the **classic** OpenAI surface (`/v1/chat/completions`), so `OpenAiGateway` is structurally misaligned.
 
-Each upstream gateway directory ships its own `Concerns/` subdirectory with provider-specific helpers. For OllamaGateway these are:
+The actual template — verified in `vendor/laravel/ai/src/Gateway/Mistral/` — is **`MistralGateway`**:
 
-  - `BuildsTextRequests` — converts SDK message + tool DTOs to provider HTTP body
-  - `CreatesOllamaClient` — instantiates `Http::` client with base URL + auth + timeout
-  - `HandlesTextStreaming` — SSE chunk parsing
-  - `MapsAttachments` — multimodal attachment formatting
-  - `MapsMessages` — role + content shape
-  - `MapsTools` — tool catalog → provider schema
-  - `ParsesTextResponses` — response → `TextResponse` DTO
+  - posts text to `chat/completions` with `body['stream'] = true` for streams
+  - posts embeddings to `embeddings` (classic OpenAI shape — `{ model, input }`)
+  - composes the same 7 concerns Regolo will need (`BuildsTextRequests`, `CreatesMistralClient`, `HandlesTextStreaming`, `MapsAttachments`, `MapsMessages`, `MapsTools`, `ParsesTextResponses`)
+  - extends the abstract `Provider` and overrides the constructor to skip the parent gateway argument — the same pattern `RegoloProvider` already uses
+  - reads provider config (api key, base URL) inside the gateway via `$provider->providerCredentials()` and `$provider->additionalConfiguration()['url']` — the gateway constructor takes only `Dispatcher $events`
 
-The package will need a parallel `src/Gateway/Regolo/Concerns/` directory with Regolo-specific versions of each. Given Regolo's OpenAI-compatible chat surface, each Regolo concern can largely be copied from the OpenAI gateway concerns (with base-URL substitution and minor tweaks).
+Three other classic-API templates are also valid as cross-references when Mistral diverges (e.g. provider-specific response validation): `DeepSeekGateway`, `GroqGateway`, `OpenRouterGateway`. All four post to `chat/completions`, all four ship a parallel concerns directory.
+
+For reranking, the equivalent template is `Laravel\Ai\Gateway\JinaGateway` — single file, no concerns split, posts to `/rerank` with `{ model, query, documents, top_n }` and parses Cohere-style `data.results[].relevance_score` + `data.results[].index`.
+
+### Concerns to copy from `Mistral/Concerns/` and adapt to Regolo
+
+| Concern | Lines | Adaptation needed |
+|---|---|---|
+| `BuildsTextRequests` | ~90 | Namespace + 1× `class_basename($tool)` (in MapsTools) for tool-not-supported error message — Regolo supports tools, no change. Otherwise copy verbatim. |
+| `CreatesMistralClient` → `CreatesRegoloClient` | ~30 | Rename, change default base URL to `https://api.regolo.ai/v1`, keep `withToken()` Bearer auth. |
+| `HandlesTextStreaming` | ~325 | Namespace only. SSE parser is OpenAI-classic-compatible. |
+| `MapsAttachments` | ~78 | Namespace + provider-name in `InvalidArgumentException` ("Regolo" vs "Mistral"). |
+| `MapsMessages` | ~129 | Namespace only. Chat Completions shape is identical. |
+| `MapsTools` | ~59 | Namespace + provider-name in error message ("Regolo" vs "Mistral"). |
+| `ParsesTextResponses` | ~325 | Namespace + provider-name in `validateTextResponse` exception ("Regolo" vs "Mistral"). |
+
+Plus three vendor concerns we **use as-is** (no copy — the package depends on them through the public SDK contract):
+
+  - `Laravel\Ai\Gateway\Concerns\HandlesFailoverErrors` (HTTP error handling + structured `AiException`)
+  - `Laravel\Ai\Gateway\Concerns\InvokesTools` (tool dispatch into the SDK's tool registry)
+  - `Laravel\Ai\Gateway\Concerns\ParsesServerSentEvents` (raw SSE chunk parser)
+
+### Constructor refactor required on existing scaffold
+
+The current `src/Gateway/Regolo/RegoloGateway.php` declares `__construct(string $apiKey, string $baseUrl, int $timeout, Dispatcher $events)`. **This must be reduced to `__construct(Dispatcher $events)`** to match the upstream pattern. All credentials and base URL are read from the `Provider` argument passed to each gateway method, via `$provider->providerCredentials()['key']` and `$provider->additionalConfiguration()['url'] ?? 'https://api.regolo.ai/v1'`.
+
+Correspondingly, `src/Providers/RegoloProvider.php::regoloGateway()` must drop `apiKey:`, `baseUrl:`, `timeout:` from the `new RegoloGateway(...)` call and pass only `$this->events`. Timeout is the SDK's per-call argument (`$timeout` on the gateway method signature), not gateway state.
 
 ### Endpoint map (Regolo → SDK gateway method)
 
 | SDK gateway method | HTTP endpoint | Body shape | Response DTO |
 |---|---|---|---|
-| `TextGateway::generateText` | `POST /v1/chat/completions` | OpenAI-compatible | `TextResponse` |
-| `TextGateway::streamText` | `POST /v1/chat/completions` with `stream: true` | OpenAI SSE | `Generator<StreamEvent>` |
-| `EmbeddingGateway::generateEmbeddings` | `POST /v1/embeddings` | OpenAI-compatible | `EmbeddingsResponse` |
-| `RerankingGateway::rerank` | `POST /v1/rerank` | Cohere/Jina-style | `RerankingResponse` |
+| `TextGateway::generateText` | `POST /v1/chat/completions` | OpenAI-compatible classic | `TextResponse` |
+| `TextGateway::streamText` | `POST /v1/chat/completions` with `stream: true` + `stream_options: { include_usage: true }` | OpenAI SSE | `Generator<StreamEvent>` |
+| `EmbeddingGateway::generateEmbeddings` | `POST /v1/embeddings` | OpenAI-compatible (`{ model, input }`) | `EmbeddingsResponse` |
+| `RerankingGateway::rerank` | `POST /v1/rerank` | Cohere/Jina-style (`{ model, query, documents, top_n }`) | `RerankingResponse` (uses `Laravel\Ai\Responses\Data\RankedDocument`) |
 
 ### Implementation order for next session
 
-1. Fetch + read `src/Gateway/OpenAi/OpenAiGateway.php` and `src/Gateway/OpenAi/Concerns/*` — confirm reusability
-2. Fetch + read `src/Responses/TextResponse.php`, `EmbeddingsResponse.php`, `RerankingResponse.php` — confirm DTO shapes
-3. Implement `RegoloGateway::generateText` reusing OpenAI shape
-4. Implement `RegoloGateway::streamText`
-5. Implement `RegoloGateway::generateEmbeddings`
-6. Implement `RegoloGateway::rerank`
-7. Write 40 tests (4 ported from upstream Python SDK + 36 robustness; see `docs/test-coverage-vs-python-sdk.md`)
+1. Refactor `RegoloGateway` constructor: drop `apiKey/baseUrl/timeout`, keep only `Dispatcher $events`.
+2. Refactor `RegoloProvider::regoloGateway()` to call `new RegoloGateway($this->events)`.
+3. Create `src/Gateway/Regolo/Concerns/CreatesRegoloClient.php` (Mistral pattern, base URL `https://api.regolo.ai/v1`).
+4. Copy `BuildsTextRequests`, `HandlesTextStreaming`, `MapsAttachments`, `MapsMessages`, `MapsTools`, `ParsesTextResponses` from `vendor/laravel/ai/src/Gateway/Mistral/Concerns/` into `src/Gateway/Regolo/Concerns/`. Adapt namespace + provider-name strings only.
+5. Implement `RegoloGateway::generateText` — `POST chat/completions`, parse, return `TextResponse`.
+6. Implement `RegoloGateway::streamText` — `POST chat/completions` with `stream: true`, yield from `processTextStream`.
+7. Implement `RegoloGateway::generateEmbeddings` — `POST embeddings`, return `EmbeddingsResponse`.
+8. Implement `RegoloGateway::rerank` — `POST rerank` (Jina shape), parse `data.results[]` into `RankedDocument[]`, return `RerankingResponse`.
+9. Write 40 tests (4 ported from upstream Python SDK + 36 robustness; see `docs/test-coverage-vs-python-sdk.md`).
+10. Open W2.A.2 PR (chat + stream subset of the 40 tests). W2.A.3 (embed + rerank) ships in a follow-up PR.
