@@ -28,7 +28,7 @@
 7. [Usage examples](#usage-examples)
 8. [Configuration reference](#configuration-reference)
 9. [Architecture](#architecture)
-10. [🚀 AI vibe-coding pack included](#-ai-vibe-coding-pack-included)
+10. [🚀 AI vibe-coding pack included](#ai-vibe-coding-pack-included)
 11. [Testing](#testing)
     - [Default suite — offline](#default-suite--offline-zero-cost-runs-everywhere)
     - [Running the live test suite](#running-the-live-test-suite-against-the-real-regolo-api)
@@ -90,7 +90,7 @@ The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or an
 - **Strict typing** — PHP 8.3+, readonly DTOs, fully-typed signatures, Pint-formatted, PHPStan level 6.
 - **CI matrix** — every push runs against PHP 8.3 / 8.4 / 8.5 × Laravel 12 / 13 (6 jobs). Laravel 11 is **not supported** — `laravel/ai` itself requires `illuminate/support: ^12.0|^13.0`.
 - **53 unit tests / 115 assertions** — every Python-SDK happy-path is ported, plus 36 robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn).
-- 🚀 **AI vibe-coding pack ships in the box** — every release includes the [Padosoft Claude pack](#-ai-vibe-coding-pack-included) under `.claude/` (skills, rules, agents, slash-commands). The moment you `composer require` this package and open the project in Claude Code, the agent picks up Padosoft's house conventions automatically. **No other Laravel AI provider package ships this today.**
+- 🚀 **AI vibe-coding pack ships in the box** — every release includes the [Padosoft Claude pack](#ai-vibe-coding-pack-included) under `.claude/` (skills, rules, agents, slash-commands). The moment you `composer require` this package and open the project in Claude Code, the agent picks up Padosoft's house conventions automatically. **No other Laravel AI provider package ships this today.**
 - 🧪 **Opt-in live test suite** — point `REGOLO_API_KEY` at a real key and run `vendor/bin/phpunit --testsuite Live` to verify wire compatibility against `api.regolo.ai`. Default suite remains 100% offline. See [Running the live test suite](#running-the-live-test-suite-against-the-real-regolo-api).
 
 ## Comparison vs alternatives

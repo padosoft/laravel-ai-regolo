@@ -44,12 +44,24 @@ final class RegoloRerankLiveTest extends LiveTestCase
             $this->assertSame($documents[$result->index], $result->document);
         }
 
-        // Scores must be in descending order — that is the API contract,
-        // not a happy coincidence. A flaky model here would surface as
-        // an off-by-one bug somewhere in the stack.
+        // Scores must arrive in DESCENDING order. Using a direct
+        // comparison via assertTrue() is intentional here so the
+        // intent is unambiguous to future readers (PHPUnit's
+        // assertGreaterThanOrEqual takes ($expected, $actual) — the
+        // argument order trips reviewers when the assertion encodes
+        // ordering rather than equality).
         $scores = array_map(fn (RankedDocument $r) => $r->score, $response->results);
         for ($i = 0; $i < count($scores) - 1; $i++) {
-            $this->assertGreaterThanOrEqual($scores[$i + 1], $scores[$i], 'Rerank scores must arrive in descending order.');
+            $this->assertTrue(
+                $scores[$i] >= $scores[$i + 1],
+                sprintf(
+                    'Rerank scores must arrive in descending order: scores[%d]=%.4f should be >= scores[%d]=%.4f.',
+                    $i,
+                    $scores[$i],
+                    $i + 1,
+                    $scores[$i + 1],
+                ),
+            );
         }
 
         // Smoke-level relevance: the Roma doc should outrank "calcio".

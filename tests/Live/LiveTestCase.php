@@ -104,11 +104,18 @@ abstract class LiveTestCase extends TestCase
     }
 
     /**
-     * Per-call timeout used by the gateway methods. Live tests pass
-     * this value explicitly to `generateText` / `streamText` /
-     * `generateEmbeddings` / `rerank` so the `REGOLO_LIVE_TIMEOUT`
-     * env var actually controls the HTTP client deadline. Without
-     * this hop the gateway's own 60s default would silently win.
+     * Timeout (seconds) honoured by the live tests, drawn from
+     * `REGOLO_LIVE_TIMEOUT` with a 60s default.
+     *
+     * Three of the four SDK gateway methods accept a per-call timeout
+     * argument — `generateText`, `streamText`, `generateEmbeddings` —
+     * and the chat / streaming / embeddings live tests pass this
+     * value through explicitly. `RegoloGateway::rerank()` does not
+     * accept a per-call timeout in its SDK signature; it picks the
+     * value up from the provider's HTTP-client config, which is
+     * already set via `liveProvider()`'s `'timeout' => ...` entry.
+     * The env var therefore controls every live request, just via
+     * two paths.
      */
     protected function liveTimeout(): int
     {

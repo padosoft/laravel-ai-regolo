@@ -26,6 +26,7 @@ final class RegoloStreamingLiveTest extends LiveTestCase
             $this->textModel(),
             'Reply in two short sentences.',
             [new UserMessage('Tell me one fact about Florence.')],
+            timeout: $this->liveTimeout(),
         ));
 
         $start = array_filter($events, fn ($e) => $e instanceof StreamStart);
