@@ -95,15 +95,25 @@ final class RegoloTranscriptionLiveTest extends LiveTestCase
     }
 
     /**
-     * Best-effort MIME detection from filename extension. The gateway's
-     * multipart filename heuristic uses the same mapping in reverse,
-     * so we keep them in sync.
+     * MIME detection for the audio fixture, in two layers:
+     *
+     *   1. Trust the file extension when it matches one of the
+     *      Whisper-supported formats — that is the canonical
+     *      mapping the upstream documents and the gateway's
+     *      multipart filename heuristic uses the same mapping in
+     *      reverse, so the two stay in sync.
+     *   2. Fall back to PHP's `finfo_file()` for any other extension
+     *      so a user who points at, say, a recording without a
+     *      file extension still gets a correct `Content-Type`.
+     *   3. If both miss, mark the test skipped with a clear message
+     *      rather than uploading the bytes mislabeled as `audio/mpeg`
+     *      (which would surface as a confusing upstream 415 / 422).
      */
     private function detectAudioMimeType(string $path): string
     {
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
-        return match ($extension) {
+        $extensionMap = [
             'mp3' => 'audio/mpeg',
             'wav' => 'audio/wav',
             'ogg' => 'audio/ogg',
@@ -111,7 +121,32 @@ final class RegoloTranscriptionLiveTest extends LiveTestCase
             'm4a' => 'audio/m4a',
             'webm' => 'audio/webm',
             'mp4' => 'audio/mp4',
-            default => 'audio/mpeg',
-        };
+        ];
+
+        if (isset($extensionMap[$extension])) {
+            return $extensionMap[$extension];
+        }
+
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo !== false) {
+                $detected = finfo_file($finfo, $path);
+                finfo_close($finfo);
+
+                if (is_string($detected) && str_starts_with($detected, 'audio/')) {
+                    return $detected;
+                }
+            }
+        }
+
+        $this->markTestSkipped(sprintf(
+            'Could not determine an audio MIME type for "%s" — extension "%s" '.
+            'is not in the Whisper-supported list (mp3 / wav / ogg / flac / m4a / '.
+            'webm / mp4) and `finfo_file()` did not return an `audio/*` value. '.
+            'Point REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH at a recognised audio '.
+            'file format to enable this scenario.',
+            $path,
+            $extension !== '' ? $extension : '(none)',
+        ));
     }
 }

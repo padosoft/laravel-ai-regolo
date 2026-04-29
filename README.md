@@ -504,10 +504,13 @@ export REGOLO_LIVE_IMAGE_MODEL=Qwen-Image
 export REGOLO_LIVE_TRANSCRIPTION_MODEL=faster-whisper-large-v3
 export REGOLO_LIVE_TIMEOUT=60                       # seconds
 
-# Multimodal-only — self-skips when unset:
+# Multimodal — required for the corresponding live test (the test
+# self-skips when the var is unset):
 # REGOLO_LIVE_AUDIO_MODEL=...                       # TTS model id from Seeweb (catalogue not on /v1/models yet)
-# REGOLO_LIVE_AUDIO_VOICE=alloy                     # voice id forwarded verbatim to TTS
 # REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH=/path/to/sample.mp3  # any short speech recording
+
+# Multimodal — optional overrides (defaults apply when unset):
+# REGOLO_LIVE_AUDIO_VOICE=alloy                     # voice id forwarded verbatim to TTS
 # REGOLO_LIVE_TRANSCRIPTION_LANGUAGE=it             # ISO 639-1; omit to let Whisper auto-detect
 ```
 

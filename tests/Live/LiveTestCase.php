@@ -39,13 +39,18 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  *   REGOLO_LIVE_TRANSCRIPTION_MODEL       default: faster-whisper-large-v3
  *   REGOLO_LIVE_TIMEOUT                   default: 60
  *
- * Multimodal-only — the test self-skips when these are unset:
+ * Multimodal — the corresponding live test self-skips when these
+ * are unset:
  *
  *   REGOLO_LIVE_AUDIO_MODEL               TTS model id from Seeweb
  *                                         (catalogue not on /v1/models)
- *   REGOLO_LIVE_AUDIO_VOICE               default: alloy
  *   REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH  path to a real speech file
+ *
+ * Multimodal — optional overrides (defaults apply when unset):
+ *
+ *   REGOLO_LIVE_AUDIO_VOICE               default: alloy
  *   REGOLO_LIVE_TRANSCRIPTION_LANGUAGE    optional ISO 639-1 hint
+ *                                         (omit to let Whisper auto-detect)
  *
  * Embedding vector dimension is **model-defined** — the live tests do
  * not attempt to override it. `RegoloGateway::generateEmbeddings()`
