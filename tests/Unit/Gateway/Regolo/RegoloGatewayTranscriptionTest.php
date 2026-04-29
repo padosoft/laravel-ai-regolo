@@ -186,6 +186,55 @@ final class RegoloGatewayTranscriptionTest extends TestCase
     }
 
     /**
+     * Pin the MIME → filename extension mapping in `audioFilename()`.
+     *
+     * The mapping has to keep `audio/m4a` and `audio/mp4` as DISTINCT
+     * extensions because Whisper-style endpoints treat `.m4a` and
+     * `.mp4` as different file types — labelling an `.m4a` payload
+     * `audio.mp4` (or vice versa) trips a strict upstream dispatcher.
+     * Container types (`video/mp4`, `video/webm`) reach this mapping
+     * via `finfo_file()` for audio-only containers and must resolve to
+     * the underlying audio extension.
+     */
+    public function test_multipart_filename_mime_extension_mapping(): void
+    {
+        $reflection = new \ReflectionMethod(RegoloGateway::class, 'audioFilename');
+        $reflection->setAccessible(true);
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $cases = [
+            // [mime, expected filename]
+            ['audio/mpeg',                 'audio.mp3'],
+            ['audio/mp3',                  'audio.mp3'],
+            ['audio/wav',                  'audio.wav'],
+            ['audio/x-wav',                'audio.wav'],
+            ['audio/ogg',                  'audio.ogg'],
+            ['audio/ogg; codecs=opus',     'audio.ogg'],
+            ['audio/flac',                 'audio.flac'],
+            ['audio/x-flac',               'audio.flac'],
+            ['audio/m4a',                  'audio.m4a'],
+            ['audio/x-m4a',                'audio.m4a'],
+            ['audio/mp4',                  'audio.mp4'],
+            ['audio/webm',                 'audio.webm'],
+            ['audio/mpga',                 'audio.mpga'],
+            // Containers reported by finfo_file() for audio-only payloads:
+            ['video/mp4',                  'audio.mp4'],
+            ['video/webm',                 'audio.webm'],
+            // Fallback for unknown MIME stays at the safe default:
+            ['application/octet-stream',   'audio.mp3'],
+        ];
+
+        foreach ($cases as [$mime, $expected]) {
+            $audio = new Base64Audio(base64_encode('x'), $mime);
+            $this->assertSame(
+                $expected,
+                $reflection->invoke($gateway, $audio),
+                sprintf('audioFilename(%s) should produce %s', $mime, $expected),
+            );
+        }
+    }
+
+    /**
      * @return array<int, class-string>
      */
     protected function getPackageProviders($app): array
