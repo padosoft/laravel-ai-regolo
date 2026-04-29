@@ -488,17 +488,27 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
     /**
      * Inspect the first few bytes of a base64-encoded image payload to
      * label the response with the actual format. Regolo's `Qwen-Image`
-     * empirically returns JPEG (`\xFF\xD8\xFF\xE0` SOI + JFIF marker)
-     * even though the SDK's OpenAI-compatible response envelope has no
-     * `mime` field — without sniffing the bytes we'd hand `image/png`
-     * downstream and the `<img>` tag emitter / file-store helpers
-     * would write `.png` files containing JPEG bytes.
+     * empirically returns JPEG today — using the JFIF APP0 marker
+     * (`\xFF\xD8\xFF\xE0`) — even though the SDK's OpenAI-compatible
+     * response envelope has no `mime` field; without sniffing the
+     * bytes we'd hand `image/png` downstream and the `<img>` tag
+     * emitter / file-store helpers would write `.png` files
+     * containing JPEG bytes. The sniffer accepts ANY JPEG variant,
+     * not just JFIF — the JPEG check below matches the 3-byte
+     * `\xFF\xD8\xFF` SOI prefix that's common to every APP marker
+     * family (JFIF/E0, EXIF/E1, ICC/E2, ...), so a future Regolo
+     * release that swaps the marker family still resolves correctly.
      *
-     * Recognised signatures:
-     *   - PNG:  `\x89PNG\r\n\x1a\n` (8 bytes, canonical)
-     *   - JPEG: `\xFF\xD8\xFF`      (3-byte SOI + APP marker family)
-     *   - WebP: `RIFF....WEBP`      (RIFF + 4 size bytes + 'WEBP')
-     *   - GIF:  `GIF87a` / `GIF89a`
+     * Recognised signatures (only the first ~12 raw bytes need
+     * decoding — see the prefix-only optimisation in the body):
+     *   - PNG:  `\x89PNG\r\n\x1a\n`        (8 bytes, canonical)
+     *   - JPEG: `\xFF\xD8\xFF` + any APPn   (3 bytes; matches JFIF /
+     *                                       EXIF / Adobe / etc.)
+     *   - WebP: `RIFF` + 4 size bytes + `WEBP` (12 bytes total — the
+     *                                       `WEBP` marker at offset
+     *                                       8 disambiguates the
+     *                                       container from WAV/AVI)
+     *   - GIF:  `GIF87a` / `GIF89a`        (6 bytes)
      *
      * Falls back to `image/png` for unrecognised payloads — that
      * matches the long-standing OpenAI default and keeps existing
@@ -511,16 +521,25 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
             return 'image/png';
         }
 
+        // Decode only a short base64 prefix instead of the entire
+        // payload — Qwen-Image renders are routinely several MB and
+        // the sniffer never needs more than the first 12 raw bytes
+        // (the longest signature segment is WebP's
+        // `RIFF....WEBP` ending at offset 11). 16 base64 characters
+        // decode to exactly 12 raw bytes under strict mode (4 chars
+        // → 3 bytes); take 24 chars to absorb future signature
+        // additions without re-tuning the constant. Copilot review
+        // on PR #11 round-3 flagged the prior "decode the whole
+        // payload" branch as avoidable CPU+RAM overhead.
+        //
         // strict: true so a non-base64 payload (e.g. the unit-test
-        // fixtures `'fake-png-1'`) decodes to `false` and reliably hits
-        // the `image/png` fallback below. With strict: false, PHP would
-        // best-effort-decode the garbage into arbitrary bytes that
-        // could accidentally match one of the magic prefixes downstream
-        // and surface a wrong MIME — Copilot caught this on the v0.2.2
-        // review (PR #11). The live test rounds-tripped the same
-        // payload via `base64_decode(..., strict: true)`, so strict
-        // here keeps the gateway and the live assertion in lockstep.
-        $bytes = base64_decode($base64, strict: true);
+        // fixtures `'fake-png-1'`) decodes to `false` and reliably
+        // hits the `image/png` fallback below. With strict: false,
+        // PHP would best-effort-decode the garbage into arbitrary
+        // bytes that could accidentally match one of the magic
+        // prefixes downstream and surface a wrong MIME — Copilot
+        // also caught this in round-1.
+        $bytes = base64_decode(substr($base64, 0, 24), strict: true);
         if ($bytes === false || strlen($bytes) < 8) {
             return 'image/png';
         }
