@@ -4,43 +4,62 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelAiRegolo;
 
+use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Ai\AiManager;
 use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
 
 /**
  * Service provider that registers the Regolo provider with the
  * official `laravel/ai` SDK.
  *
- * Ollama is intentionally NOT registered here — `laravel/ai` ships
- * a first-class `Laravel\Ai\Providers\OllamaProvider` out of the box,
- * so adding our own would shadow the upstream and break compatibility
- * when the upstream is updated. Users who want Ollama configure it
- * via `config/ai.php` directly against the SDK's built-in driver.
+ * Registration is done by resolving the upstream `AiManager` from the
+ * container and calling its `extend('regolo', $callback)` method.
+ * `AiManager` extends Laravel's `MultipleInstanceManager`, which
+ * resolves drivers in two ways:
  *
- * The binding key `ai.provider.regolo` is what the SDK resolves when
- * the application calls `Agent::prompt(...)`, `Embeddings::for(...)`,
- * or `Reranking::of(...)` with a `Lab::Custom('regolo')` argument or
- * a `regolo` default declared in `config/ai.php`.
+ *   1. By calling a `create<DriverName>Driver(array $config)` method
+ *      on the manager (the path used by every built-in provider:
+ *      `createOpenaiDriver`, `createMistralDriver`, ...).
+ *   2. By looking up the driver in the `customCreators` map populated
+ *      via `extend()`. Calls to a `customCreator` pass `($app, $config)`
+ *      and have `$this` rebound to the manager.
+ *
+ * A simple `$this->app->bind('ai.provider.regolo', ...)` is **not**
+ * sufficient: `MultipleInstanceManager` does not look at container
+ * bindings to resolve drivers. Without registering through
+ * `AiManager::extend()` the SDK throws `InvalidArgumentException:
+ * Instance driver [regolo] is not supported.` on every call.
+ *
+ * Note on the implementation choice: we resolve `AiManager::class`
+ * directly from the container instead of going through the
+ * `Laravel\Ai\Ai` facade. The facade does not document `extend()`
+ * statically (PHPStan would fire `staticMethod.notFound`), and the
+ * direct binding gives us a stronger type for static analysis.
+ *
+ * Ollama is intentionally NOT registered here — `laravel/ai` ships a
+ * first-class `Laravel\Ai\Providers\OllamaProvider` out of the box, so
+ * adding our own would shadow the upstream and break compatibility
+ * when the upstream is updated. Users who want Ollama configure it via
+ * `config/ai.php` directly against the SDK's built-in driver.
  */
 final class LaravelAiRegoloServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        $this->app->bind('ai.provider.regolo', function ($app) {
-            return new RegoloProvider(
-                config: (array) config('ai.providers.regolo', []),
-                events: $app->make('events'),
-            );
-        });
+        // No-op at register-time. The `extend()` call belongs in boot()
+        // because it depends on the upstream `laravel/ai` service provider
+        // having already registered the `AiManager::class` binding —
+        // service-provider boot order guarantees this.
     }
 
     public function boot(): void
     {
-        // Configuration publishing is intentionally NOT exposed here —
-        // `config/ai.php` is owned by `laravel/ai` and our provider
-        // simply slots into the existing `providers` array. Users are
-        // expected to declare the `regolo` entry directly in their
-        // application's published copy of `config/ai.php`. See README
-        // for the canonical config snippet.
+        $this->app->make(AiManager::class)->extend('regolo', function ($app, array $config) {
+            return new RegoloProvider(
+                config: $config,
+                events: $app->make(Dispatcher::class),
+            );
+        });
     }
 }

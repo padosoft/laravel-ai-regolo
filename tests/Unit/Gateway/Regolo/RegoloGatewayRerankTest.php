@@ -7,6 +7,7 @@ namespace Padosoft\LaravelAiRegolo\Tests\Unit\Gateway\Regolo;
 use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
+use Laravel\Ai\AiServiceProvider;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Laravel\Ai\Responses\Data\RankedDocument;
@@ -362,7 +363,10 @@ final class RegoloGatewayRerankTest extends TestCase
      */
     protected function getPackageProviders($app): array
     {
-        return [LaravelAiRegoloServiceProvider::class];
+        return [
+            AiServiceProvider::class,
+            LaravelAiRegoloServiceProvider::class,
+        ];
     }
 
     private function makeProvider(array $configOverride = []): RegoloProvider
