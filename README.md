@@ -331,6 +331,9 @@ The original `index` and `document` are preserved on each result so you can map 
 | `ai.providers.regolo.models.embeddings.default`    | string  | `Qwen3-Embedding-8B`          | Used by `Embeddings::for()->generate('regolo')`.                      |
 | `ai.providers.regolo.models.embeddings.dimensions` | int     | `4096`                        | Embedding vector dimension. Must match downstream vector store.       |
 | `ai.providers.regolo.models.reranking.default`     | string  | `jina-reranker-v2`            | Used by `Reranking::of()->rerank(..., 'regolo')`.                     |
+| `ai.providers.regolo.models.image.default`         | string  | `Qwen-Image`                  | Used by `Image::of(...)->generate('regolo')`. Wire to `env('REGOLO_IMAGE_MODEL', 'Qwen-Image')` in `config/ai.php` for env-var override. |
+| `ai.providers.regolo.models.transcription.default` | string  | `faster-whisper-large-v3`     | Used by `Transcription::of($audio)->using('regolo')->generate()`. Wire to `env('REGOLO_TRANSCRIPTION_MODEL', 'faster-whisper-large-v3')`. |
+| `ai.providers.regolo.models.audio.default`         | string  | _empty_                       | Used by `Audio::for(...)->generate('regolo')` (TTS). Regolo's TTS catalogue is not on `GET /v1/models` yet; pass the model id explicitly. Wire to `env('REGOLO_AUDIO_MODEL')`. |
 
 ## Architecture
 
@@ -413,12 +416,16 @@ vendor/bin/phpunit
 
 Coverage breakdown:
 
-| Suite                            | Tests | Description                                                          |
-|----------------------------------|:-----:|----------------------------------------------------------------------|
-| `RegoloGatewayChatTest`          |   18  | 4 ported from Regolo Python SDK + 14 robustness (streaming, errors)  |
-| `RegoloGatewayEmbeddingsTest`    |   13  | 1 ported + 12 robustness (empty / batch / Unicode / 4xx / 429 / 503) |
-| `RegoloGatewayRerankTest`        |   15  | 1 ported + 14 robustness (top_n / score-ordering / index integrity)  |
-| `ServiceProviderTest`            |    6  | container binding + capability interfaces + gateway compositional    |
+| Suite                              | Tests | Description                                                          |
+|------------------------------------|:-----:|----------------------------------------------------------------------|
+| `RegoloGatewayChatTest`            |   21  | 4 ported from Regolo Python SDK + 17 robustness (streaming, errors)  |
+| `RegoloGatewayEmbeddingsTest`      |   12  | 1 ported + 11 robustness (empty / batch / Unicode / 4xx / 429 / 503) |
+| `RegoloGatewayRerankTest`          |   13  | 1 ported + 12 robustness (top_n / score-ordering / index integrity)  |
+| `RegoloGatewayImageTest`           |    7  | `images/generations` happy + size/quality + edit-rejection + timeout const |
+| `RegoloGatewayAudioTest`           |    6  | `audio/speech` (TTS) happy + voice/instructions forwarding + empty-body resilience |
+| `RegoloGatewayTranscriptionTest`   |    6  | `audio/transcriptions` (STT) happy + diarize + Whisper usage mapping |
+| `RegoloGatewayTimeoutFallbackTest` |    8  | provider-level timeout fallback (numeric / empty / non-numeric / negative) |
+| `ServiceProviderTest`              |    7  | container binding + capability interfaces + gateway compositional    |
 
 The test inventory and the rationale for each robustness scenario is documented in [`docs/test-coverage-vs-python-sdk.md`](docs/test-coverage-vs-python-sdk.md).
 

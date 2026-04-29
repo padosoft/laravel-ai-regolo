@@ -169,11 +169,13 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
 
     /**
      * @param  '3:2'|'2:3'|'1:1'|null  $size
-     * @param  'low'|'medium'|'high'|null  $quality  Loosely typed in the
-     *                                               SDK interface as `mixed` so it can accept enums / objects in
-     *                                               future SDK versions; we keep the docblock narrow because the
-     *                                               wire endpoint only accepts the three canonical strings, but
-     *                                               the runtime guard below tolerates any stringable value.
+     * @param  'low'|'medium'|'high'|\BackedEnum|\Stringable|int|float|null  $quality
+     *                                                                                 Loosely typed in the SDK interface as `mixed` so it can
+     *                                                                                 accept enums / scalars / objects in future SDK versions.
+     *                                                                                 The runtime guard below normalises every reasonable value
+     *                                                                                 to its canonical string form; only `array` and `resource`
+     *                                                                                 fall through to the silent-drop branch because they have
+     *                                                                                 no meaningful string projection for this wire endpoint.
      * @return array<string, string>
      */
     public function defaultImageOptions(?string $size = null, $quality = null): array
@@ -182,19 +184,20 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
         // through `size` / `quality` only when the caller supplied them
         // — leaving them off lets the upstream model use its own
         // defaults (Qwen-Image accepts the OpenAI canonical sizes).
-        // Cast `$quality` defensively because the SDK leaves it
-        // untyped (LSP requires us to keep the parent's wider
-        // contract); a stringable value still produces a valid wire
-        // body, anything else gets dropped silently rather than
-        // crashing the request.
         $body = [];
 
         if ($size !== null) {
             $body['size'] = $size;
         }
 
-        if ($quality !== null && (is_string($quality) || (is_object($quality) && method_exists($quality, '__toString')))) {
-            $body['quality'] = (string) $quality;
+        // `$quality` is `mixed` in the SDK contract (LSP forces us to
+        // keep the wider parent type). Normalise every plausible value
+        // to its string projection; arrays / resources / boolean false
+        // have no meaningful representation for this wire field and
+        // are silently dropped rather than crashing the request.
+        $normalisedQuality = $this->normaliseImageQuality($quality);
+        if ($normalisedQuality !== null) {
+            $body['quality'] = $normalisedQuality;
         }
 
         return $body;
@@ -219,5 +222,49 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
         // $provider->additionalConfiguration()['url']. Only the events
         // dispatcher is gateway state.
         return $this->regoloGateway ??= new RegoloGateway($this->events);
+    }
+
+    /**
+     * Coerce a `$quality` value into its canonical wire-string form.
+     *
+     * The set of accepted shapes mirrors what production Laravel apps
+     * routinely pass in: native `'low'|'medium'|'high'` strings, PHP
+     * 8.1+ backed enums (e.g. `ImageQuality::High`), `Stringable`
+     * value objects, and scalar number/boolean primitives a config
+     * file might surface. Anything else (`array`, `resource`, plain
+     * `object` without `__toString`) returns `null` so the wire body
+     * just omits the field.
+     */
+    private function normaliseImageQuality(mixed $quality): ?string
+    {
+        if ($quality === null) {
+            return null;
+        }
+
+        if (is_string($quality)) {
+            return $quality !== '' ? $quality : null;
+        }
+
+        if ($quality instanceof \BackedEnum) {
+            return (string) $quality->value;
+        }
+
+        if ($quality instanceof \UnitEnum) {
+            return $quality->name;
+        }
+
+        if (is_object($quality) && method_exists($quality, '__toString')) {
+            return (string) $quality;
+        }
+
+        if (is_int($quality) || is_float($quality)) {
+            return (string) $quality;
+        }
+
+        if (is_bool($quality)) {
+            return $quality ? 'true' : 'false';
+        }
+
+        return null;
     }
 }
