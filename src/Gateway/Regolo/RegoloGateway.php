@@ -455,11 +455,20 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
             }
         }
 
+        // Both `audio/...` and `video/...` containers map to a real
+        // extension because MP4 and WebM containers commonly carry an
+        // audio-only stream — `finfo_file()` returns the container
+        // type even when the payload is pure audio, and Whisper-style
+        // STT endpoints accept the underlying audio regardless of
+        // how the container labels itself. The previous mapping
+        // silently fell back to `audio.mp3` for `video/mp4` /
+        // `video/webm`, which then triggered upstream 415 / 422
+        // because the bytes (mp4) and the filename (.mp3) disagreed.
         $extension = match ($audio->mimeType()) {
-            'audio/webm' => 'webm',
+            'audio/webm', 'video/webm' => 'webm',
             'audio/ogg', 'audio/ogg; codecs=opus' => 'ogg',
             'audio/wav', 'audio/x-wav' => 'wav',
-            'audio/mp4', 'audio/m4a', 'audio/x-m4a' => 'm4a',
+            'audio/mp4', 'audio/m4a', 'audio/x-m4a', 'video/mp4' => 'mp4',
             'audio/flac', 'audio/x-flac' => 'flac',
             'audio/mpeg', 'audio/mp3' => 'mp3',
             'audio/mpga' => 'mpga',
