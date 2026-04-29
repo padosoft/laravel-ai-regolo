@@ -40,7 +40,7 @@ final class ServiceProviderTest extends TestCase
         $this->assertTrue($providers[LaravelAiRegoloServiceProvider::class]);
     }
 
-    public function test_ai_driver_regolo_resolves_to_regolo_provider(): void
+    public function test_ai_instance_regolo_resolves_to_regolo_provider(): void
     {
         $resolved = Ai::instance('regolo');
 
