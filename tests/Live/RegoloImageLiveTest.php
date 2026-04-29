@@ -48,12 +48,15 @@ final class RegoloImageLiveTest extends LiveTestCase
             $first->image,
             'Generated image must carry a non-empty base64 payload.',
         );
-        $this->assertSame(
-            'image/png',
+        $this->assertContains(
             $first->mime,
-            'Gateway must label the generated image as PNG; '.
-            'the OpenAI-compatible /v1/images/generations endpoint '.
-            'returns base64 PNG by default.',
+            ['image/png', 'image/jpeg', 'image/webp', 'image/gif'],
+            'Gateway must label the generated image with a recognised '.
+            'image MIME type — sniffed from the base64 payload because '.
+            "the OpenAI-compatible /v1/images/generations envelope has\n".
+            'no `mime` field. Regolo\'s `Qwen-Image` empirically '.
+            "returns JPEG today; the gateway's signature-sniffer\n".
+            'handles JPEG / PNG / WebP / GIF.',
         );
 
         // Round-trip the base64 payload to confirm it actually decodes
@@ -67,21 +70,44 @@ final class RegoloImageLiveTest extends LiveTestCase
         $this->assertGreaterThan(
             0,
             strlen($decoded),
-            'Decoded PNG bytes must be non-empty.',
+            'Decoded image bytes must be non-empty.',
         );
 
-        // Sanity check on the PNG file signature so a future
-        // upstream regression that switches to JPEG or returns
-        // empty bytes fails this test loudly rather than masquerading
-        // as success.
+        // Sanity-check the file signature against whatever MIME the
+        // gateway claimed. A mismatch (claim PNG but bytes are JPEG)
+        // would point at a regression in the signature sniffer
+        // itself, not at Regolo, and is the failure we want to catch
+        // loudly here.
         $this->assertSame(
-            "\x89PNG\r\n\x1a\n",
-            substr($decoded, 0, 8),
-            'Decoded bytes must start with the canonical PNG '.
-            'file signature (`\x89PNG\\r\\n\\x1a\\n`).',
+            $this->expectedMagicForMime($first->mime),
+            substr($decoded, 0, strlen($this->expectedMagicForMime($first->mime))),
+            sprintf(
+                'Decoded bytes must start with the canonical magic prefix for '.
+                'the gateway-claimed MIME `%s`.',
+                $first->mime,
+            ),
         );
 
         $this->assertSame('regolo', $response->meta->provider);
         $this->assertSame($this->imageModel(), $response->meta->model);
+    }
+
+    /**
+     * Map a recognised image MIME to its file-signature magic bytes.
+     * The gateway's `detectImageMime()` is the source of truth for
+     * what each MIME means; this helper inverts that mapping for the
+     * live-test assertion. Keep the two in sync — if a new MIME ever
+     * gets added on the gateway side, add the matching magic prefix
+     * here and the assertion stays meaningful.
+     */
+    private function expectedMagicForMime(string $mime): string
+    {
+        return match ($mime) {
+            'image/png' => "\x89PNG\r\n\x1a\n",
+            'image/jpeg' => "\xFF\xD8\xFF",
+            'image/webp' => 'RIFF',
+            'image/gif' => 'GIF8',
+            default => "\x00",
+        };
     }
 }

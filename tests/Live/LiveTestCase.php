@@ -34,7 +34,7 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  *   REGOLO_BASE_URL                       default: https://api.regolo.ai/v1
  *   REGOLO_LIVE_TEXT_MODEL                default: Llama-3.1-8B-Instruct
  *   REGOLO_LIVE_EMBEDDINGS_MODEL          default: Qwen3-Embedding-8B
- *   REGOLO_LIVE_RERANKING_MODEL           default: jina-reranker-v2
+ *   REGOLO_LIVE_RERANKING_MODEL           default: Qwen3-Reranker-4B
  *   REGOLO_LIVE_IMAGE_MODEL               default: Qwen-Image
  *   REGOLO_LIVE_TRANSCRIPTION_MODEL       default: faster-whisper-large-v3
  *   REGOLO_LIVE_TIMEOUT                   default: 60
@@ -197,7 +197,7 @@ abstract class LiveTestCase extends TestCase
 
     protected function rerankingModel(): string
     {
-        return $this->envValue('REGOLO_LIVE_RERANKING_MODEL') ?? 'jina-reranker-v2';
+        return $this->envValue('REGOLO_LIVE_RERANKING_MODEL') ?? 'Qwen3-Reranker-4B';
     }
 
     protected function imageModel(): string

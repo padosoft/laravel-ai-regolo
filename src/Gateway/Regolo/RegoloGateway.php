@@ -320,7 +320,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         return new ImageResponse(
             (new Collection($data['data'] ?? []))->map(fn (array $image) => new GeneratedImage(
                 $image['b64_json'] ?? '',
-                'image/png',
+                $this->detectImageMime($image['b64_json'] ?? ''),
             )),
             new Usage(0, 0),
             new Meta($provider->name(), $model),
@@ -483,6 +483,56 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         };
 
         return "audio.{$extension}";
+    }
+
+    /**
+     * Inspect the first few bytes of a base64-encoded image payload to
+     * label the response with the actual format. Regolo's `Qwen-Image`
+     * empirically returns JPEG (`\xFF\xD8\xFF\xE0` SOI + JFIF marker)
+     * even though the SDK's OpenAI-compatible response envelope has no
+     * `mime` field — without sniffing the bytes we'd hand `image/png`
+     * downstream and the `<img>` tag emitter / file-store helpers
+     * would write `.png` files containing JPEG bytes.
+     *
+     * Recognised signatures:
+     *   - PNG:  `\x89PNG\r\n\x1a\n` (8 bytes, canonical)
+     *   - JPEG: `\xFF\xD8\xFF`      (3-byte SOI + APP marker family)
+     *   - WebP: `RIFF....WEBP`      (RIFF + 4 size bytes + 'WEBP')
+     *   - GIF:  `GIF87a` / `GIF89a`
+     *
+     * Falls back to `image/png` for unrecognised payloads — that
+     * matches the long-standing OpenAI default and keeps existing
+     * unit-test fixtures (which pass deliberate non-image payloads
+     * like `'fake-png-1'`) green.
+     */
+    private function detectImageMime(string $base64): string
+    {
+        if ($base64 === '') {
+            return 'image/png';
+        }
+
+        $bytes = base64_decode($base64, strict: false);
+        if ($bytes === false || strlen($bytes) < 8) {
+            return 'image/png';
+        }
+
+        if (str_starts_with($bytes, "\x89PNG\r\n\x1a\n")) {
+            return 'image/png';
+        }
+
+        if (str_starts_with($bytes, "\xFF\xD8\xFF")) {
+            return 'image/jpeg';
+        }
+
+        if (str_starts_with($bytes, 'RIFF') && substr($bytes, 8, 4) === 'WEBP') {
+            return 'image/webp';
+        }
+
+        if (str_starts_with($bytes, 'GIF87a') || str_starts_with($bytes, 'GIF89a')) {
+            return 'image/gif';
+        }
+
+        return 'image/png';
     }
 
     /**

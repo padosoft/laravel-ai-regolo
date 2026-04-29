@@ -107,7 +107,7 @@ final class ServiceProviderTest extends TestCase
         // resolution path so any future config-shape change is caught.
         $this->assertSame('Llama-3.1-8B-Instruct', $provider->defaultTextModel());
         $this->assertSame('Qwen3-Embedding-8B', $provider->defaultEmbeddingsModel());
-        $this->assertSame('jina-reranker-v2', $provider->defaultRerankingModel());
+        $this->assertSame('Qwen3-Reranker-4B', $provider->defaultRerankingModel());
     }
 
     /**

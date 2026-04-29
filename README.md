@@ -196,7 +196,7 @@ return [
                     'dimensions' => 4096,
                 ],
                 'reranking'  => [
-                    'default' => 'jina-reranker-v2',
+                    'default' => 'Qwen3-Reranker-4B',
                 ],
             ],
         ],
@@ -345,7 +345,7 @@ $ranked = Reranking::of([
     'Pasta al pomodoro is a classic Italian dish.',
 ])
     ->limit(2)
-    ->rerank('What is the capital of Italy?', 'regolo', 'jina-reranker-v2');
+    ->rerank('What is the capital of Italy?', 'regolo', 'Qwen3-Reranker-4B');
 
 foreach ($ranked->results as $result) {
     echo "{$result->score}  {$result->document}\n";
@@ -370,7 +370,7 @@ The original `index` and `document` are preserved on each result so you can map 
 | `ai.providers.regolo.models.text.smartest`         | string  | `Llama-3.3-70B-Instruct`      | Used by `Lab::Smartest` shorthand.                                    |
 | `ai.providers.regolo.models.embeddings.default`    | string  | `Qwen3-Embedding-8B`          | Used by `Embeddings::for()->generate('regolo')`.                      |
 | `ai.providers.regolo.models.embeddings.dimensions` | int     | `4096`                        | Embedding vector dimension. Must match downstream vector store.       |
-| `ai.providers.regolo.models.reranking.default`     | string  | `jina-reranker-v2`            | Used by `Reranking::of()->rerank(..., 'regolo')`.                     |
+| `ai.providers.regolo.models.reranking.default`     | string  | `Qwen3-Reranker-4B`            | Used by `Reranking::of()->rerank(..., 'regolo')`.                     |
 | `ai.providers.regolo.models.image.default`         | string  | `Qwen-Image`                  | Used by `Image::of(...)->generate('regolo')`. Wire to `env('REGOLO_IMAGE_MODEL', 'Qwen-Image')` in `config/ai.php` for env-var override. |
 | `ai.providers.regolo.models.transcription.default` | string  | `faster-whisper-large-v3`     | Used by `Transcription::of($audio)->using('regolo')->generate()`. Wire to `env('REGOLO_TRANSCRIPTION_MODEL', 'faster-whisper-large-v3')`. |
 | `ai.providers.regolo.models.audio.default`         | string  | _empty_                       | Used by `Audio::for(...)->generate('regolo')` (TTS). Regolo's TTS catalogue is not on `GET /v1/models` yet; pass the model id explicitly. Wire to `env('REGOLO_AUDIO_MODEL')`. |
@@ -485,6 +485,14 @@ The live suite is **opt-in by design**:
 
 [regolo.ai](https://regolo.ai) → sign up → copy your `rg_live_...` key.
 
+**Step 1 — open the API keys section in the Regolo dashboard:**
+
+![Regolo dashboard — API keys section](resources/regolo-api-key-step1.png)
+
+**Step 2 — create a new key and copy it:**
+
+![Regolo dashboard — create new API key](resources/regolo-api-key-step2.png)
+
 #### 2. Configure the environment
 
 The bare minimum is a single env var:
@@ -499,7 +507,7 @@ Optional overrides (defaults pick the same models the package ships as defaults)
 export REGOLO_BASE_URL=https://api.regolo.ai/v1     # change for staging
 export REGOLO_LIVE_TEXT_MODEL=Llama-3.1-8B-Instruct
 export REGOLO_LIVE_EMBEDDINGS_MODEL=Qwen3-Embedding-8B
-export REGOLO_LIVE_RERANKING_MODEL=jina-reranker-v2
+export REGOLO_LIVE_RERANKING_MODEL=Qwen3-Reranker-4B
 export REGOLO_LIVE_IMAGE_MODEL=Qwen-Image
 export REGOLO_LIVE_TRANSCRIPTION_MODEL=faster-whisper-large-v3
 export REGOLO_LIVE_TIMEOUT=60                       # seconds
@@ -514,10 +522,29 @@ export REGOLO_LIVE_TIMEOUT=60                       # seconds
 # REGOLO_LIVE_TRANSCRIPTION_LANGUAGE=it             # ISO 639-1; omit to let Whisper auto-detect
 ```
 
-On Windows PowerShell:
+On Windows PowerShell — single var:
 
 ```powershell
 $env:REGOLO_API_KEY = "rg_live_..."
+```
+
+If you prefer keeping the live-suite credentials in a `.env` file at the package root (the same format `.env.example` ships), you can hydrate the current shell from it before invoking PHPUnit. PHPUnit itself does **not** read `.env` — it reads only what the shell (or `<php><env>` in `phpunit.xml`) hands it — so a small loader is the standard pattern:
+
+**PowerShell:**
+
+```powershell
+Get-Content .env |
+    Where-Object { $_ -match '^[A-Z_][A-Z0-9_]*=' -and $_ -notmatch '^#' } |
+    ForEach-Object {
+        $parts = $_ -split '=', 2
+        [Environment]::SetEnvironmentVariable($parts[0], $parts[1], 'Process')
+    }
+```
+
+**Bash / zsh:**
+
+```bash
+set -a && source .env && set +a
 ```
 
 #### 3. Run the live suite
@@ -526,29 +553,38 @@ $env:REGOLO_API_KEY = "rg_live_..."
 vendor/bin/phpunit --testsuite Live
 ```
 
-Expected output (with a working key + the default models):
+…or, with the testdox formatter so each scenario prints by name:
 
-```
-PHPUnit by Sebastian Bergmann.
-
-........                                  6 / 6 (100%)
-
-Time: ~10s   Memory: 30 MB
-
-OK (6 tests, ~25 assertions)
+```bash
+vendor/bin/phpunit --testsuite Live --testdox
 ```
 
-If the env var is unset:
+Expected output (with a working `REGOLO_API_KEY` + the default models, and `REGOLO_LIVE_AUDIO_MODEL` / `REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH` left **unset** — the package's intentional default state):
 
 ```
-PHPUnit by Sebastian Bergmann.
+PHPUnit 12.x by Sebastian Bergmann.
 
-ssssss                                    6 / 6 (100%)
+S.......S                                  9 / 9 (100%)
 
-Time: ~0.3s
+Time: ~30s   Memory: 40 MB
 
 OK, but some tests were skipped!
-Tests: 6, Assertions: 0, Skipped: 6.
+Tests: 9, Assertions: 53, Skipped: 2.
+```
+
+The two `S` are the audio-TTS and transcription tests self-skipping by design — Regolo's TTS catalogue is not on `/v1/models` yet (Seeweb-only model id) and transcription needs a real speech recording on disk. Set both vars and the full 9/9 runs.
+
+If the API key is unset:
+
+```
+PHPUnit 12.x by Sebastian Bergmann.
+
+SSSSSSSSS                                  9 / 9 (100%)
+
+Time: ~0.1s
+
+OK, but some tests were skipped!
+Tests: 9, Assertions: 0, Skipped: 9.
 ```
 
 #### What the live suite verifies
@@ -564,6 +600,10 @@ Tests: 6, Assertions: 0, Skipped: 6.
 | `RegoloTranscriptionLiveTest`     | `POST /v1/audio/transcriptions` (faster-whisper-large-v3) returns non-empty `text` — **self-skips** unless `REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH` points at a real speech file | minimal |
 
 **Total cost per run**: well under €0.01 with the default small-model selection. Pick a heavier text model via `REGOLO_LIVE_TEXT_MODEL` if you want to validate a specific catalogue entry — the cost scales linearly with the model.
+
+The Regolo dashboard's **Usage** tab confirms the per-run footprint — the snapshot below is from a real `vendor/bin/phpunit --testsuite Live` invocation against the package defaults:
+
+![Regolo dashboard — usage report after a single live test run](resources/regolo-usage-live-test.png)
 
 #### CI policy
 
