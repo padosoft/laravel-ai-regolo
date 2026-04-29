@@ -63,12 +63,14 @@ PR.
 
 ### Step 2 — grep the documentation surface
 
-Search for every existing count claim in the repo:
+Search for every existing count claim in the repo. The third line
+uses `-r` so `docs/` (a directory) is recursed into rather than
+triggering "Is a directory" on grep:
 
 ```bash
 grep -nE '[0-9]+ (unit )?tests?( ?(/|,) ?[0-9]+ assertions?)?' README.md
 grep -nE 'OK \([0-9]+ tests, [0-9]+ assertions\)' README.md
-grep -nE '[0-9]+ (unit )?tests?( ?(/|,) ?[0-9]+ assertions?)?' .github/PULL_REQUEST_TEMPLATE.md docs/ 2>/dev/null
+grep -rnE '[0-9]+ (unit )?tests?( ?(/|,) ?[0-9]+ assertions?)?' .github/PULL_REQUEST_TEMPLATE.md docs/ 2>/dev/null
 ```
 
 Also search the PR description body (`gh pr view <N> --json body --jq .body`).
@@ -85,15 +87,27 @@ Common locations:
 ### Step 3 — reconcile every match
 
 For every grep hit, replace the old count with the canonical numbers
-captured in Step 1. Use a single `sed` pass for safety:
+captured in Step 1.
+
+`sed -i` semantics differ between GNU sed (Linux / WSL) and BSD sed
+(macOS): GNU accepts `sed -i 'EXPR' FILE`; BSD requires an explicit
+extension argument (`sed -i '' 'EXPR' FILE`). The portable
+form below works on both — write to a temp file via `>` and `mv`
+back over the original. Reconcile with a single multi-expression
+pass so all three count shapes (`X unit tests / Y assertions`,
+`OK (X tests, Y assertions)`, `X tests / Y assertions`) get patched
+together:
 
 ```bash
-sed -i 's/OLD_TESTS unit tests \/ OLD_ASSERTIONS assertions/NEW_TESTS unit tests \/ NEW_ASSERTIONS assertions/g; \
-        s/OK (OLD_TESTS tests, OLD_ASSERTIONS assertions)/OK (NEW_TESTS tests, NEW_ASSERTIONS assertions)/g; \
-        s/OLD_TESTS tests \/ OLD_ASSERTIONS assertions/NEW_TESTS tests \/ NEW_ASSERTIONS assertions/g' README.md
+tmp=$(mktemp) && sed -E \
+  -e 's/[0-9]+ unit tests \/ [0-9]+ assertions/NEW_TESTS unit tests \/ NEW_ASSERTIONS assertions/g' \
+  -e 's/OK \([0-9]+ tests, [0-9]+ assertions\)/OK (NEW_TESTS tests, NEW_ASSERTIONS assertions)/g' \
+  -e 's/[0-9]+ tests \/ [0-9]+ assertions/NEW_TESTS tests \/ NEW_ASSERTIONS assertions/g' \
+  README.md > "$tmp" && mv "$tmp" README.md
 ```
 
-Then re-grep to verify zero hits remain on the old numbers:
+Then re-grep to verify zero hits remain on the OLD numbers (replace
+`NEW_TESTS` and `NEW_ASSERTIONS` with the actual integers from Step 1):
 
 ```bash
 grep -nE 'OLD_TESTS tests|OLD_ASSERTIONS assertions' README.md
@@ -115,9 +129,13 @@ This is **part of the push prep**, not a follow-up.
 ### Step 5 — final sanity check
 
 Run the suite **one more time** and confirm the closing line still
-matches the numbers now in `README.md`:
+matches the numbers now in `README.md`. **Use `set -o pipefail`** —
+without it the pipeline exit code is `tail`'s (always `0`), masking
+a phpunit non-zero exit. With pipefail the first non-zero in the
+pipeline propagates:
 
 ```bash
+set -o pipefail
 vendor/bin/phpunit | tail -3
 grep "OK (NEW_TESTS tests, NEW_ASSERTIONS assertions)" README.md
 ```
