@@ -192,9 +192,11 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
 
         // `$quality` is `mixed` in the SDK contract (LSP forces us to
         // keep the wider parent type). Normalise every plausible value
-        // to its string projection; arrays / resources / boolean false
-        // have no meaningful representation for this wire field and
-        // are silently dropped rather than crashing the request.
+        // to its string projection; arrays, resources, and booleans
+        // (both `true` and `false`) have no meaningful representation
+        // for this wire field and are silently dropped rather than
+        // crashing the request — `'true'`/`'false'` are upstream-422
+        // values, see `normaliseImageQuality()` below.
         $normalisedQuality = $this->normaliseImageQuality($quality);
         if ($normalisedQuality !== null) {
             $body['quality'] = $normalisedQuality;
@@ -230,9 +232,13 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
      * The set of accepted shapes mirrors what production Laravel apps
      * routinely pass in: native `'low'|'medium'|'high'` strings, PHP
      * 8.1+ backed enums (e.g. `ImageQuality::High`), `Stringable`
-     * value objects, and scalar number/boolean primitives a config
-     * file might surface. Anything else (`array`, `resource`, plain
-     * `object` without `__toString`) returns `null` so the wire body
+     * value objects, and `int` / `float` primitives a config file
+     * might surface (a model that ever exposes a numeric quality knob
+     * gets the value verbatim). Anything else — `array`, `resource`,
+     * plain `object` without `__toString`, **and `bool`** (both
+     * `true` and `false`, because `'true'` / `'false'` are wire-
+     * invalid for `/v1/images/generations` and there is no useful
+     * boolean→quality mapping) — returns `null` so the wire body
      * just omits the field.
      */
     private function normaliseImageQuality(mixed $quality): ?string
