@@ -168,8 +168,13 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
     }
 
     /**
-     * @param  'low'|'medium'|'high'|null  $quality
-     * @return array<string, mixed>
+     * @param  '3:2'|'2:3'|'1:1'|null  $size
+     * @param  'low'|'medium'|'high'|null  $quality  Loosely typed in the
+     *                                               SDK interface as `mixed` so it can accept enums / objects in
+     *                                               future SDK versions; we keep the docblock narrow because the
+     *                                               wire endpoint only accepts the three canonical strings, but
+     *                                               the runtime guard below tolerates any stringable value.
+     * @return array<string, string>
      */
     public function defaultImageOptions(?string $size = null, $quality = null): array
     {
@@ -177,10 +182,22 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
         // through `size` / `quality` only when the caller supplied them
         // — leaving them off lets the upstream model use its own
         // defaults (Qwen-Image accepts the OpenAI canonical sizes).
-        return array_filter([
-            'size' => $size,
-            'quality' => $quality,
-        ], fn ($v) => $v !== null);
+        // Cast `$quality` defensively because the SDK leaves it
+        // untyped (LSP requires us to keep the parent's wider
+        // contract); a stringable value still produces a valid wire
+        // body, anything else gets dropped silently rather than
+        // crashing the request.
+        $body = [];
+
+        if ($size !== null) {
+            $body['size'] = $size;
+        }
+
+        if ($quality !== null && (is_string($quality) || (is_object($quality) && method_exists($quality, '__toString')))) {
+            $body['quality'] = (string) $quality;
+        }
+
+        return $body;
     }
 
     public function defaultAudioModel(): string

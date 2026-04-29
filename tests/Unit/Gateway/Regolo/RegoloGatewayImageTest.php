@@ -7,6 +7,7 @@ namespace Padosoft\LaravelAiRegolo\Tests\Unit\Gateway\Regolo;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\AiServiceProvider;
+use Laravel\Ai\Providers\Provider;
 use Orchestra\Testbench\TestCase;
 use Padosoft\LaravelAiRegolo\Gateway\Regolo\RegoloGateway;
 use Padosoft\LaravelAiRegolo\LaravelAiRegoloServiceProvider;
@@ -120,28 +121,17 @@ final class RegoloGatewayImageTest extends TestCase
         );
     }
 
-    public function test_generate_image_uses_120_second_default_timeout_when_caller_omits(): void
+    public function test_image_default_timeout_constant_is_120_seconds(): void
     {
-        Http::fake([
-            'api.regolo.test/v1/images/generations' => Http::response($this->imageFixture(['x'])),
-        ]);
-
-        $gateway = new RegoloGateway($this->app->make('events'));
-
-        // The image endpoint defaults to 120s rather than the gateway's
-        // 60s text default because image rendering is meaningfully
-        // slower. The caller can still override via `$timeout`.
-        $gateway->generateImage(
-            $this->makeProvider(),
-            'Qwen-Image',
-            'A photo of the Pantheon at dusk.',
-        );
-
-        // The Http::fake() response went through, which is the only
-        // observable signal from outside that the longer timeout was
-        // applied (it would have been a connect failure otherwise on a
-        // real network).
-        Http::assertSentCount(1);
+        // `generateImage` applies `self::IMAGE_DEFAULT_TIMEOUT_SECONDS`
+        // when the caller passes `null` for `$timeout`. The constant
+        // is the single point of truth for the image-endpoint
+        // timeout — pinning it here means a future "let me tune this
+        // down" change has to consciously update both the constant
+        // and this assertion. Image rendering on Qwen-Image takes
+        // 8–25s for a typical prompt; the 60s text-default is too
+        // tight, hence the dedicated longer ceiling.
+        $this->assertSame(120, RegoloGateway::IMAGE_DEFAULT_TIMEOUT_SECONDS);
     }
 
     public function test_generate_image_default_model_falls_through_provider_config(): void

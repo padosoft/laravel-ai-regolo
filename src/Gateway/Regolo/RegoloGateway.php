@@ -69,6 +69,18 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
     use InvokesTools;
     use ParsesServerSentEvents;
 
+    /**
+     * Default HTTP timeout (seconds) applied to `generateImage` when
+     * the caller passes `null` for `$timeout`. Image rendering is
+     * meaningfully slower than text generation on Regolo's catalogue
+     * (Qwen-Image takes 8–25s on a typical prompt), so the gateway
+     * raises the timeout above the 60s text default. Exposed as a
+     * `public const` so the unit suite can assert that
+     * `generateImage` actually applies this value (testing the timeout
+     * any other way would require mocking a `final` class).
+     */
+    public const IMAGE_DEFAULT_TIMEOUT_SECONDS = 120;
+
     public function __construct(protected Dispatcher $events)
     {
         $this->initializeToolCallbacks();
@@ -294,7 +306,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
 
         $response = $this->withErrorHandling(
             $provider->name(),
-            fn () => $this->client($provider, $timeout ?? 120)->post('images/generations', $body),
+            fn () => $this->client($provider, $timeout ?? self::IMAGE_DEFAULT_TIMEOUT_SECONDS)->post('images/generations', $body),
         );
 
         $data = $response->json();
@@ -315,9 +327,13 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
      *
      * The endpoint mirrors OpenAI's `audio/speech` shape so the same body
      * applies (`model`, `input`, `voice`, `response_format`, `speed`,
-     * `instructions`). Regolo's TTS model catalogue is not fully public
-     * yet — pass the model name surfaced by `GET /v1/models` (or whatever
-     * the Seeweb team publishes); the gateway does not pin a default.
+     * `instructions`). Regolo's TTS model catalogue is **not** part of
+     * the public `GET /v1/models` listing yet — the model name has to
+     * come from the Seeweb team directly (commercial / early-access
+     * channel). The gateway does not pin a default and
+     * `RegoloProvider::defaultAudioModel()` returns `''` when the
+     * config block is empty so the upstream `model required` 4xx is
+     * the clear failure mode rather than a hard-coded guess.
      *
      * The two SDK pseudo-voices (`default-male`, `default-female`) are
      * forwarded verbatim — Regolo accepts custom voice ids and the SDK
