@@ -115,13 +115,18 @@ final class RegoloGatewayTranscriptionTest extends TestCase
         $this->assertSame('speaker-1', $response->segments[0]->speaker);
         $this->assertEqualsWithDelta(0.0, $response->segments[0]->startSeconds, 0.001);
         $this->assertEqualsWithDelta(0.7, $response->segments[0]->endSeconds, 0.001);
-        // The SDK's Usage DTO uses promptTokens / completionTokens
-        // positional fields. The gateway maps Whisper's input_tokens →
-        // promptTokens (positional 0) and total_tokens → completionTokens
-        // (positional 1) for now; future SDK versions may add a
-        // dedicated audio-token field. See `Usage::__construct`.
+        // Whisper usage maps `input_tokens` → `promptTokens` and the
+        // billed delta (`total_tokens - input_tokens`, floored at 0)
+        // → `completionTokens`. Fixture is { input: 5, total: 12 } so
+        // the SDK consumer reading `promptTokens + completionTokens`
+        // gets the original `total_tokens` (12) without double-counting.
         $this->assertSame(5, $response->usage->promptTokens);
-        $this->assertSame(12, $response->usage->completionTokens);
+        $this->assertSame(7, $response->usage->completionTokens);
+        $this->assertSame(
+            12,
+            $response->usage->promptTokens + $response->usage->completionTokens,
+            'Sum of prompt + completion must equal Whisper total_tokens (no double counting).',
+        );
 
         Http::assertSent(function (Request $request) {
             return $this->multipartContains($request, 'name="response_format"', 'diarized_json');

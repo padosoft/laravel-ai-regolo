@@ -386,6 +386,18 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
 
         $data = $response->json();
 
+        // Whisper-style usage: `input_tokens` is the audio-in cost,
+        // `total_tokens` is the billed total. The SDK's Usage DTO
+        // splits prompt vs completion, so map `input_tokens` →
+        // `promptTokens` and the *delta* (total − input, floored at 0)
+        // → `completionTokens`. Sending `total_tokens` raw into
+        // `completionTokens` would double-count when consumers add
+        // `promptTokens + completionTokens` to derive a billed-total
+        // figure.
+        $inputTokens = (int) ($data['usage']['input_tokens'] ?? 0);
+        $totalTokens = (int) ($data['usage']['total_tokens'] ?? 0);
+        $completionTokens = max($totalTokens - $inputTokens, 0);
+
         return new TranscriptionResponse(
             $data['text'] ?? '',
             (new Collection($data['segments'] ?? []))->map(fn (array $segment) => new TranscriptionSegment(
@@ -394,10 +406,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
                 $segment['start'] ?? 0,
                 $segment['end'] ?? 0,
             )),
-            new Usage(
-                $data['usage']['input_tokens'] ?? 0,
-                $data['usage']['total_tokens'] ?? 0,
-            ),
+            new Usage($inputTokens, $completionTokens),
             new Meta($provider->name(), $model),
         );
     }
