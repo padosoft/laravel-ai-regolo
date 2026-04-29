@@ -64,7 +64,7 @@ use Padosoft\LaravelAiRegolo\Gateway\Regolo\RegoloGateway;
  *  - default transcription:  faster-whisper-large-v3
  *  - default audio (TTS):    NOT pinned — Regolo's TTS catalogue is not
  *                            fully public yet. Pass the model name
- *                            explicitly via `Audio::for(...)->using('regolo', $model)`
+ *                            explicitly via `Audio::for(...)->generate('regolo', $model)`
  *                            until Seeweb publishes the catalogue.
  */
 final class RegoloProvider extends Provider implements AudioProvider, EmbeddingProvider, ImageProvider, RerankingProvider, TextProvider, TranscriptionProvider
