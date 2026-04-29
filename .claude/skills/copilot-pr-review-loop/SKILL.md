@@ -62,11 +62,10 @@ When a PR has been opened and the FIRST review/CI cycle has surfaced issues:
 Failure mode this rule prevents: "Claude pushes a commit, sees CI red,
 sends a status report to user, stops working." This wastes a CI cycle
 and hands a half-broken state to the user. The user has explicitly
-said this is unacceptable (Lorenzo, 2026-04-28):
-
-> "stanno scoppiando le CI non passano e non le stai fixando ti stai
->  fermando. il loop è quello sopra, fatti delle rules, skills precise
->  per eseguire sempre in ogni repo queste istruzioni meticolosamente"
+said this is unacceptable: when CI is red, the agent must fix the
+failure rather than reporting status and stopping. The Copilot review
+gate is a separate, non-bypassable check that runs in parallel with
+CI; both must converge before merge.
 
 ## Scope
 
@@ -207,6 +206,6 @@ Each CI run is ~2-5 minutes. Plan accordingly:
 - The skill's own header `description` field — short trigger summary
   every Claude Code agent reads on session start
 
-Lorenzo's private workspace tracks the first-instance lesson and the
-weekly status notes; those references are intentionally not pinned
-here so the skill stays portable across public and private repos.
+First-instance lessons and weekly status notes are tracked outside
+the public skill so this file stays portable across public and
+private repos.
