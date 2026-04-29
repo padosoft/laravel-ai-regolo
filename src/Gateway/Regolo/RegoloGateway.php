@@ -511,7 +511,16 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
             return 'image/png';
         }
 
-        $bytes = base64_decode($base64, strict: false);
+        // strict: true so a non-base64 payload (e.g. the unit-test
+        // fixtures `'fake-png-1'`) decodes to `false` and reliably hits
+        // the `image/png` fallback below. With strict: false, PHP would
+        // best-effort-decode the garbage into arbitrary bytes that
+        // could accidentally match one of the magic prefixes downstream
+        // and surface a wrong MIME — Copilot caught this on the v0.2.2
+        // review (PR #11). The live test rounds-tripped the same
+        // payload via `base64_decode(..., strict: true)`, so strict
+        // here keeps the gateway and the live assertion in lockstep.
+        $bytes = base64_decode($base64, strict: true);
         if ($bytes === false || strlen($bytes) < 8) {
             return 'image/png';
         }
