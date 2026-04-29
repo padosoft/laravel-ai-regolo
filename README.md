@@ -23,7 +23,8 @@
 2. [Design rationale](#design-rationale)
 3. [Features at a glance](#features-at-a-glance)
 4. [Comparison vs alternatives](#comparison-vs-alternatives)
-5. [Installation](#installation)
+5. [When to use Regolo vs OpenAI](#when-to-use-regolo-vs-openai)
+6. [Installation](#installation)
 6. [Quick start](#quick-start)
 7. [Usage examples](#usage-examples)
 8. [Configuration reference](#configuration-reference)
@@ -116,6 +117,45 @@ If you are evaluating how to call Regolo from a Laravel app, here are the realis
 | Maintenance burden when SDK ships features  |           you          |       N/A         |          you          |        you get them free        |
 
 **Bottom line:** if you want Regolo behind the same API surface that powers OpenAI, Anthropic, Gemini, Mistral, and Ollama in `laravel/ai`, this is the only package that does it.
+
+## When to use Regolo vs OpenAI
+
+`laravel/ai` ships an OpenAI provider out of the box, so the natural follow-up question is "why would I send traffic to Regolo instead of OpenAI?" Both are valid choices for Laravel apps; they optimise for different things.
+
+### Pick **Regolo** when at least one of these is true
+
+- **GDPR / EU AI Act exposure.** The traffic and the prompts (which often contain user PII, contracts, internal docs, customer support transcripts) never leave the EU — Seeweb's data centres are in Italy, and the privacy policy is bound by Italian law. OpenAI's data-residency story is gradually improving but the default request path still terminates in the US, and the legal review for a regulated workload (banking, healthcare, public-sector, insurance, legal) is materially heavier.
+- **Italian-speaking workloads.** Llama-3.x, Qwen3, Mistral and Gemma in Regolo's catalogue are tuned and benchmarked on Italian content; results on idiomatic Italian, technical Italian, and bilingual IT/EN prompts compete with much larger US-hosted closed models.
+- **Open-weight models.** Regolo serves open-weight families (Llama, Qwen, Mistral, Gemma, Phi, DeepSeek, Qwen-Image, faster-whisper, ...). If you need to migrate the workload to a self-hosted vLLM / Ollama deployment later, the prompts and the model id port over with zero rewrites — same model, same tokenizer, just a different base URL. Lock-in on closed weights (`gpt-4o`, `claude-sonnet`) makes that migration fundamentally impossible.
+- **EUR-billed pay-as-you-go.** Invoices in EUR, Italian VAT applied correctly, no FX-on-USD overhead. Material for finance teams in regulated procurement.
+- **Sovereign-cloud procurement requirements.** Public-sector tenders, defence-adjacent workloads, healthcare buyers, and several large Italian enterprises now require an EU-resident inference path as a hard procurement filter. Regolo satisfies it; OpenAI typically does not without the dedicated Microsoft Azure OpenAI EU residency tier.
+
+### Pick **OpenAI** (or stay on it) when
+
+- **Frontier model quality is the deciding factor.** GPT-4o / o1 / GPT-5 still lead on the hardest reasoning, math, and tool-use benchmarks. If your product depends on the absolute top of the curve, OpenAI is hard to beat today.
+- **You need Responses API features that have no Regolo counterpart yet.** Hosted Web Search, Code Interpreter as a built-in tool, the new `responses.create` streaming envelope. Regolo's roadmap (see [Roadmap](#roadmap)) tracks these but the upstream catalogue is what determines availability.
+- **Heavy ecosystem reliance on OpenAI-specific APIs.** Function calling extensions (parallel tool calls with pinned schemas), structured outputs at scale, the Files / Assistants / Vector Stores managed services. Some of these have analogues on the Regolo side (`/v1/embeddings`, `/v1/rerank`); others do not.
+- **No EU-residency requirement and no model-portability concern.** If your workload is happy on US-hosted closed weights and you're not preparing for a self-host migration, the procurement-and-compliance argument for moving away from OpenAI shrinks meaningfully.
+
+### Mix-and-match is fine and expected
+
+Because both providers register through `laravel/ai`'s identical SDK surface, you can route per-feature in a single Laravel app:
+
+```php
+// config/ai.php — both providers wired side-by-side
+'providers' => [
+    'openai' => [/* … OpenAI key, models … */],
+    'regolo' => [/* … Regolo key, models … */],
+],
+
+// Anti-hallucination KB chat → Regolo (EU residency for the user prompts).
+$answer = Agent::for($question)->using('regolo', 'Llama-3.3-70B-Instruct')->prompt();
+
+// Frontier reasoning over a synthetic dataset (no PII) → OpenAI.
+$reasoning = Agent::for($problem)->using('openai', 'gpt-4o')->prompt();
+```
+
+This is also why the [Comparison table above](#comparison-vs-alternatives) emphasises "same API as 14+ other providers" — the value of `laravel/ai` is precisely that you can rebalance traffic across providers without touching application code.
 
 ## Installation
 
@@ -460,7 +500,15 @@ export REGOLO_BASE_URL=https://api.regolo.ai/v1     # change for staging
 export REGOLO_LIVE_TEXT_MODEL=Llama-3.1-8B-Instruct
 export REGOLO_LIVE_EMBEDDINGS_MODEL=Qwen3-Embedding-8B
 export REGOLO_LIVE_RERANKING_MODEL=jina-reranker-v2
+export REGOLO_LIVE_IMAGE_MODEL=Qwen-Image
+export REGOLO_LIVE_TRANSCRIPTION_MODEL=faster-whisper-large-v3
 export REGOLO_LIVE_TIMEOUT=60                       # seconds
+
+# Multimodal-only — self-skips when unset:
+# REGOLO_LIVE_AUDIO_MODEL=...                       # TTS model id from Seeweb (catalogue not on /v1/models yet)
+# REGOLO_LIVE_AUDIO_VOICE=alloy                     # voice id forwarded verbatim to TTS
+# REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH=/path/to/sample.mp3  # any short speech recording
+# REGOLO_LIVE_TRANSCRIPTION_LANGUAGE=it             # ISO 639-1; omit to let Whisper auto-detect
 ```
 
 On Windows PowerShell:
@@ -508,6 +556,9 @@ Tests: 6, Assertions: 0, Skipped: 6.
 | `RegoloStreamingLiveTest`         | `POST /v1/chat/completions` with `stream: true` emits SSE → `TextDelta` events     | ~150 tokens   |
 | `RegoloEmbeddingsLiveTest`        | `POST /v1/embeddings` returns non-empty vectors with uniform length across a batch | ~100 tokens   |
 | `RegoloRerankLiveTest`            | `POST /v1/rerank` orders documents by relevance, top-1 matches the obvious answer  | minimal       |
+| `RegoloImageLiveTest`             | `POST /v1/images/generations` (Qwen-Image) returns valid base64 PNG (file signature checked) | ~€0.001 |
+| `RegoloAudioLiveTest`             | `POST /v1/audio/speech` (TTS) returns valid base64 MP3 (ID3 tag or MPEG sync word) — **self-skips** unless `REGOLO_LIVE_AUDIO_MODEL` is set, since Regolo's TTS catalogue is not on `/v1/models` yet | minimal |
+| `RegoloTranscriptionLiveTest`     | `POST /v1/audio/transcriptions` (faster-whisper-large-v3) returns non-empty `text` — **self-skips** unless `REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH` points at a real speech file | minimal |
 
 **Total cost per run**: well under €0.01 with the default small-model selection. Pick a heavier text model via `REGOLO_LIVE_TEXT_MODEL` if you want to validate a specific catalogue entry — the cost scales linearly with the model.
 
