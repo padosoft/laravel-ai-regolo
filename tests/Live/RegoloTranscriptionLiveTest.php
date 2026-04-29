@@ -28,7 +28,10 @@ use Laravel\Ai\Responses\TranscriptionResponse;
  *     espeak-ng -w /tmp/sample.wav "this is a regolo live test"
  *
  * Synthetic silence / sine waves transcribe to empty `text` so use
- * a real speech sample (the recipes above produce a usable one).
+ * a real speech sample. The first recipe (sine wave) is included
+ * only as an explicit counter-example — use the `say` (macOS) or
+ * `espeak-ng` (Linux) recipes, which produce a usable speech
+ * recording the model can actually transcribe.
  *
  * Recommended fixture: 5-15 seconds of clearly enunciated Italian or
  * English speech, ≤ 1 MB. Whisper handles longer clips but the test
@@ -141,7 +144,7 @@ final class RegoloTranscriptionLiveTest extends LiveTestCase
 
         $this->markTestSkipped(sprintf(
             'Could not determine an audio MIME type for "%s" — extension "%s" '.
-            'is not in the Whisper-supported list (mp3 / wav / ogg / flac / m4a / '.
+            'is not in the supported list (mp3 / wav / ogg / flac / m4a / '.
             'webm / mp4) and `finfo_file()` did not return an `audio/*` value. '.
             'Point REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH at a recognised audio '.
             'file format to enable this scenario.',
