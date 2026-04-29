@@ -278,7 +278,13 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
      *
      * @param  array<int, mixed>  $attachments
      * @param  '3:2'|'2:3'|'1:1'|null  $size
-     * @param  'low'|'medium'|'high'|null  $quality
+     * @param  'low'|'medium'|'high'|\BackedEnum|\Stringable|int|float|null  $quality
+     *                                                                                 Widened from the parent interface's `?string` to `mixed`
+     *                                                                                 (LSP-safe contravariant) so backed enums, Stringable value
+     *                                                                                 objects, and int/float primitives reach
+     *                                                                                 `RegoloProvider::defaultImageOptions()` for normalisation.
+     *                                                                                 Booleans / arrays / resources / plain objects fall through
+     *                                                                                 to silent-drop inside `normaliseImageQuality()`.
      */
     public function generateImage(
         ImageProvider $provider,
@@ -286,7 +292,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         string $prompt,
         array $attachments = [],
         ?string $size = null,
-        ?string $quality = null,
+        $quality = null,
         ?int $timeout = null,
     ): ImageResponse {
         if (! empty($attachments)) {
