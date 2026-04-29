@@ -7,7 +7,7 @@ description: After EVERY commit-push-PR cycle, the agent MUST loop on Copilot re
 
 ## Rule
 
-**NEVER stop a sottotask after a single commit-push.** After every push, the agent
+**NEVER stop a subtask after a single commit-push.** After every push, the agent
 **MUST** loop on the following sequence until both conditions are satisfied:
 
 1. Copilot review has **0 outstanding comments** (all addressed)
@@ -122,12 +122,29 @@ gh run view <run-id> --log-failed | head -200
 ```
 
 ### Phase D — Fix locally + test gate
+
+Run the gates the **current repo** actually has. Each repo opts into
+the subset that applies; do not run a step the repo does not ship.
+
 ```bash
-vendor/bin/phpunit --no-coverage     # all tests must pass
-cd frontend && npm test               # vitest must pass
-npm run e2e                           # playwright must pass
-vendor/bin/phpunit --testsuite Architecture  # R30+R31+R32+R34+R35
+# Always (PHP repos):
+vendor/bin/phpunit --no-coverage              # unit + feature suite
+vendor/bin/phpstan analyse --memory-limit=512M
+vendor/bin/pint --test
+
+# When the repo ships a frontend (presence of frontend/ or package.json):
+cd frontend && npm test                       # vitest
+npm run e2e                                   # playwright
+cd ..
+
+# When the repo defines a dedicated Architecture testsuite in phpunit.xml:
+vendor/bin/phpunit --testsuite Architecture   # R30+R31+R32+R34+R35
 ```
+
+The AskMyDocs main repo runs every step above. Standalone Padosoft
+packages (laravel-ai-regolo, eval-harness, laravel-flow,
+laravel-pii-redactor) run only the always-on row plus their own
+unit suite.
 
 ### Phase E — Commit + push
 ```bash
@@ -184,6 +201,12 @@ Each CI run is ~2-5 minutes. Plan accordingly:
 
 ## Reference
 
-- `EXECUTION_PROTOCOL.md` Phase 4-5-6 (in private workspace)
-- `CLAUDE.md` rule R36 (Copilot review loop)
-- Lessons in `notes/lessons/v4.0.W1.B-lesson.md` (first instance)
+- `CLAUDE.md` R36 in repos that ship one (e.g.
+  [`lopadova/AskMyDocs/CLAUDE.md`](https://github.com/lopadova/AskMyDocs/blob/main/CLAUDE.md))
+  — the canonical statement of this rule and its scope
+- The skill's own header `description` field — short trigger summary
+  every Claude Code agent reads on session start
+
+Lorenzo's private workspace tracks the first-instance lesson and the
+weekly status notes; those references are intentionally not pinned
+here so the skill stays portable across public and private repos.
