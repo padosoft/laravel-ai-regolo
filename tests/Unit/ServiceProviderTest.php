@@ -21,8 +21,10 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
 /**
  * Verifies the package wiring: service provider boots, the
  * `Ai::instance('regolo')` resolution returns a configured
- * `RegoloProvider` (registered via `Ai::extend()` in the package
- * service provider), and the gateway exposes all three SDK capability
+ * `RegoloProvider` (registered via `AiManager::extend()` — resolved
+ * directly from the container in the package service provider; the
+ * `Ai` facade does not document `extend()` statically, see PR #6
+ * docblock note), and the gateway exposes all three SDK capability
  * interfaces (text + embeddings + reranking) without trait conflicts.
  *
  * R23 — pluggable pipeline-style: the driver name `regolo` is part of
