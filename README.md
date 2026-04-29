@@ -86,7 +86,7 @@ The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or an
 - **Embeddings** via `Embeddings::for($inputs)->generate('regolo', $model)`.
 - **Reranking** via `Reranking::of($docs)->limit($k)->rerank($query, 'regolo', $model)`.
 - **Image generation** via `Image::of($prompt)->generate('regolo', $model)` — default model `Qwen-Image`, OpenAI-compatible request shape.
-- **Audio transcription (STT)** via `Transcription::of($audio)->using('regolo', $model)` — default model `faster-whisper-large-v3`, supports per-segment diarization.
+- **Audio transcription (STT)** via `Transcription::of($audio)->using('regolo', $model)->generate()` — default model `faster-whisper-large-v3`, supports per-segment diarization.
 - **Audio generation (TTS)** via `Audio::for($text)->generate('regolo', $model)` — wired against `POST /v1/audio/speech`; the upstream catalogue is not fully public yet, so the model id must be supplied explicitly.
 - **Open-model catalog** with Italian sovereign hosting (Llama-3.x, Qwen-3, Mistral, Gemma, Phi, DeepSeek, Qwen-Image, faster-whisper, more).
 - **Tool calling** — native function calling on models that support it; ReAct-style fallback on those that don't.
@@ -523,7 +523,7 @@ Open an issue or PR if you want a `workflow_dispatch` job added to this repo to 
 | Version | Status   | Highlights                                                                                                  |
 |---------|----------|-------------------------------------------------------------------------------------------------------------|
 | v0.1    | shipped  | Chat + streaming + embeddings + reranking + 61 tests + 6-cell CI matrix + WOW README + opt-in Live testsuite + AI vibe-coding pack. **First public release.** |
-| v0.2    | shipped  | Multimodal: image generation (`Image::of(...)->generate('regolo', ...)` against `/v1/images/generations`, default `Qwen-Image`), audio transcription (`Transcription::of($audio)->using('regolo', ...)` against `/v1/audio/transcriptions`, default `faster-whisper-large-v3`), text-to-speech (`Audio::for($text)->generate('regolo', ...)` against `/v1/audio/speech`). 80 tests / 163 assertions. |
+| v0.2    | shipped  | Multimodal: image generation (`Image::of(...)->generate('regolo', ...)` against `/v1/images/generations`, default `Qwen-Image`), audio transcription (`Transcription::of($audio)->using('regolo', ...)->generate()` against `/v1/audio/transcriptions`, default `faster-whisper-large-v3`), text-to-speech (`Audio::for($text)->generate('regolo', ...)` against `/v1/audio/speech`). 80 tests / 163 assertions. |
 | v0.3    | planned  | Provider-tools registry (Regolo-hosted web search / code interpreter, when published).                       |
 | v0.4    | exploring | Adaptive routing helper — pick `cheapest` vs `smartest` model per prompt with a small classifier.            |
 | v1.0    | tracking | Stable contract pinned against `laravel/ai` ^1.0 GA.                                                         |
