@@ -69,6 +69,7 @@ final class RegoloEmbeddingsLiveTest extends LiveTestCase
             $this->liveTimeout(),
         );
 
+        $this->assertInstanceOf(EmbeddingsResponse::class, $response);
         $this->assertCount(count($inputs), $response->embeddings, 'Batch size should be preserved.');
 
         // Every vector must share the same dimension AND the dimension
