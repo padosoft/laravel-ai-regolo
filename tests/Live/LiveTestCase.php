@@ -34,9 +34,15 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  *   REGOLO_BASE_URL                  default: https://api.regolo.ai/v1
  *   REGOLO_LIVE_TEXT_MODEL           default: Llama-3.1-8B-Instruct
  *   REGOLO_LIVE_EMBEDDINGS_MODEL     default: Qwen3-Embedding-8B
- *   REGOLO_LIVE_EMBEDDINGS_DIM       default: 4096
  *   REGOLO_LIVE_RERANKING_MODEL      default: jina-reranker-v2
  *   REGOLO_LIVE_TIMEOUT              default: 60
+ *
+ * Embedding vector dimension is **model-defined** — the live tests do
+ * not attempt to override it. `RegoloGateway::generateEmbeddings()`
+ * posts `{ model, input }` to `/v1/embeddings`; the SDK's `int
+ * $dimensions` argument is part of the upstream contract but is not
+ * threaded through to the wire request, and no env-var override is
+ * exposed for it.
  */
 abstract class LiveTestCase extends TestCase
 {
@@ -155,21 +161,23 @@ abstract class LiveTestCase extends TestCase
         return $this->envValue('REGOLO_LIVE_EMBEDDINGS_MODEL') ?? 'Qwen3-Embedding-8B';
     }
 
-    protected function embeddingsDimensions(): int
+    /**
+     * Placeholder dimension passed to `generateEmbeddings()` to
+     * satisfy the SDK signature (`int $dimensions`).
+     *
+     * `RegoloGateway::generateEmbeddings()` does NOT thread this value
+     * through to the wire request — the body posted to `/v1/embeddings`
+     * is `{ model, input }` only. The vector dimension that comes back
+     * is therefore entirely model-defined, and the live tests assert
+     * that every vector in a single response has the same length
+     * rather than that the length matches a configured override.
+     *
+     * The hard-coded 4096 matches Qwen3-Embedding-8B (the default
+     * `REGOLO_LIVE_EMBEDDINGS_MODEL`) but carries no semantic weight.
+     */
+    protected function embeddingsDimensionsPlaceholder(): int
     {
-        $configured = $this->envValue('REGOLO_LIVE_EMBEDDINGS_DIM');
-
-        if ($configured === null || ! is_numeric($configured)) {
-            return 4096;
-        }
-
-        $dimensions = (int) $configured;
-
-        // Reject 0 / negative dimensions: an embedding vector with
-        // <=0 dimensions is meaningless and would surface as a
-        // confusing `Http::post('/embeddings', ['dimensions' => 0])`
-        // server error rather than a clear local validation failure.
-        return $dimensions >= 1 ? $dimensions : 4096;
+        return 4096;
     }
 
     protected function rerankingModel(): string

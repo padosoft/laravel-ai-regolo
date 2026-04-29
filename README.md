@@ -449,7 +449,6 @@ Optional overrides (defaults pick the same models the package ships as defaults)
 export REGOLO_BASE_URL=https://api.regolo.ai/v1     # change for staging
 export REGOLO_LIVE_TEXT_MODEL=Llama-3.1-8B-Instruct
 export REGOLO_LIVE_EMBEDDINGS_MODEL=Qwen3-Embedding-8B
-export REGOLO_LIVE_EMBEDDINGS_DIM=4096
 export REGOLO_LIVE_RERANKING_MODEL=jina-reranker-v2
 export REGOLO_LIVE_TIMEOUT=60                       # seconds
 ```
