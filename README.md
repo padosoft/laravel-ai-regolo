@@ -176,6 +176,16 @@ REGOLO_BASE_URL=https://api.regolo.ai/v1   # optional
 AI_DEFAULT_TEXT=regolo                      # or any other configured provider
 ```
 
+The package ships a complete reference at [`.env.example`](.env.example). The fastest way to populate your app's `.env` after `composer require` is to copy the entries directly from there:
+
+```bash
+# from your Laravel app's project root
+cat vendor/padosoft/laravel-ai-regolo/.env.example >> .env
+# then edit .env and fill in REGOLO_API_KEY
+```
+
+`.env.example` documents every env var the package reads (runtime + live test suite) with inline comments explaining defaults, validation rules, and security implications — keep it bookmarked when wiring CI workflows or rotating credentials.
+
 ## Quick start
 
 ```php
