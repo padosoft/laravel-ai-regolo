@@ -131,7 +131,18 @@ abstract class LiveTestCase extends TestCase
      */
     protected function liveTimeout(): int
     {
-        return (int) ($this->envValue('REGOLO_LIVE_TIMEOUT') ?? 60);
+        $configured = $this->envValue('REGOLO_LIVE_TIMEOUT');
+
+        if ($configured === null || ! is_numeric($configured)) {
+            return 60;
+        }
+
+        $timeout = (int) $configured;
+
+        // Reject 0 / negative values: the underlying Guzzle client
+        // treats Http::timeout(0) as "no timeout at all", which is a
+        // footgun for live tests that should always fail fast.
+        return $timeout >= 1 ? $timeout : 60;
     }
 
     protected function textModel(): string

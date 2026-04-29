@@ -55,17 +55,26 @@ trait CreatesRegoloClient
 
     /**
      * Read the provider-level default timeout (seconds) from
-     * `config/ai.php`'s `providers.regolo.timeout`. Falls back to 60s
-     * when the entry is missing.
+     * `config/ai.php`'s `providers.regolo.timeout`.
+     *
+     * Validation gate: a missing entry, an empty string, a non-numeric
+     * value, or a value <= 0 falls back to the 60s hard default. This
+     * prevents a misconfigured `REGOLO_TIMEOUT="abc"` (or `"0"`, or
+     * `"-30"`) from silently becoming `Http::timeout(0)`, which on
+     * the underlying Guzzle client means "no timeout at all" — a
+     * footgun that has bitten production deployments where a stuck
+     * upstream would hang the request indefinitely.
      */
     protected function providerTimeout(Provider $provider): int
     {
         $configured = $provider->additionalConfiguration()['timeout'] ?? null;
 
-        if ($configured === null || $configured === '') {
+        if ($configured === null || $configured === '' || ! is_numeric($configured)) {
             return 60;
         }
 
-        return (int) $configured;
+        $timeout = (int) $configured;
+
+        return $timeout >= 1 ? $timeout : 60;
     }
 }
