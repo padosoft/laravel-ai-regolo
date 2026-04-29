@@ -78,58 +78,85 @@ final class RegoloImageLiveTest extends LiveTestCase
             'Decoded image bytes must be non-empty.',
         );
 
-        // Sanity-check every magic-byte segment the gateway's MIME
-        // claim implies. A mismatch (claim PNG but bytes are JPEG, or
-        // claim WebP but the `WEBP` marker at offset 8 is missing —
-        // a `RIFF` container can hold WAV/AVI/etc., so the WebP
-        // detector requires both prefixes) would point at a
-        // regression in the signature sniffer itself, not at Regolo,
-        // and is the failure we want to catch loudly here.
-        foreach ($this->expectedMagicSegmentsForMime($first->mime) as [$offset, $expected]) {
-            $this->assertSame(
-                $expected,
-                substr($decoded, $offset, strlen($expected)),
-                sprintf(
-                    'Decoded bytes at offset %d must equal the canonical magic '.
-                    'segment `%s` for the gateway-claimed MIME `%s`.',
-                    $offset,
-                    bin2hex($expected),
-                    $first->mime,
-                ),
-            );
+        // Sanity-check the decoded bytes against every accepted
+        // signature variant for the gateway-claimed MIME. The test
+        // passes when AT LEAST ONE variant matches all its segments
+        // — most formats have a single canonical signature, but
+        // **GIF** ships in two variants (`GIF87a` / `GIF89a`) and
+        // both are valid. A mismatch (claim PNG but bytes are JPEG,
+        // claim WebP but the `WEBP` marker at offset 8 is missing,
+        // claim GIF but the bytes are neither `GIF87a` nor
+        // `GIF89a`) would point at a regression in the signature
+        // sniffer itself, not at Regolo, and is the failure we want
+        // to catch loudly here.
+        $variants = $this->expectedMagicVariantsForMime($first->mime);
+        $matchedVariant = false;
+        foreach ($variants as $variant) {
+            $allSegmentsMatch = true;
+            foreach ($variant as [$offset, $expected]) {
+                if (substr($decoded, $offset, strlen($expected)) !== $expected) {
+                    $allSegmentsMatch = false;
+                    break;
+                }
+            }
+            if ($allSegmentsMatch) {
+                $matchedVariant = true;
+                break;
+            }
         }
+        $this->assertTrue(
+            $matchedVariant,
+            sprintf(
+                'Decoded bytes must match at least one canonical signature '.
+                'variant for the gateway-claimed MIME `%s`. Got prefix `%s` '.
+                '(first 12 bytes, hex).',
+                $first->mime,
+                bin2hex(substr($decoded, 0, 12)),
+            ),
+        );
 
         $this->assertSame('regolo', $response->meta->provider);
         $this->assertSame($this->imageModel(), $response->meta->model);
     }
 
     /**
-     * Map a recognised image MIME to the list of `[offset, bytes]`
-     * segments its file-signature must satisfy. The gateway's
+     * Map a recognised image MIME to the list of accepted signature
+     * variants. Each variant is itself a list of `[offset, bytes]`
+     * segments — the assertion passes when ALL segments of AT LEAST
+     * ONE variant match the decoded prefix. The gateway's
      * `detectImageMime()` is the source of truth for what each MIME
-     * means; this helper inverts that mapping for the live-test
-     * assertion. Keep the two in sync — if a new MIME ever gets added
-     * on the gateway side, add the matching segments here and the
-     * assertion stays meaningful.
+     * means; this helper mirrors that mapping for the live-test
+     * assertion. Keep the two in sync — if a new MIME or variant
+     * ever gets added on the gateway side, add the matching variant
+     * here and the assertion stays meaningful.
      *
-     * Most formats are identified by a single prefix at offset 0, but
-     * **WebP** is a `RIFF` container with the `WEBP` discriminator at
-     * offset 8 — checking `RIFF` alone would also accept WAV/AVI and
-     * silently mask a sniffer regression that mis-labels them as
-     * `image/webp` (Copilot review on PR #11). Returning a list of
-     * segments lets the assertion check both anchors without
-     * special-casing in the test body.
+     * - **PNG** has a single canonical 8-byte signature.
+     * - **JPEG** is identified by the 3-byte `\xFF\xD8\xFF` SOI prefix
+     *   common to every APP marker family (JFIF / EXIF / ICC / ...).
+     * - **WebP** is a `RIFF` container with the `WEBP` discriminator
+     *   at offset 8 — checking `RIFF` alone would also accept
+     *   WAV/AVI and silently mask a sniffer regression that
+     *   mis-labels them as `image/webp` (Copilot PR #11 round-1).
+     * - **GIF** ships as `GIF87a` (1987 spec) or `GIF89a` (1989
+     *   spec); both are valid. The gateway's detector accepts both
+     *   so the test must too — the prior `'GIF8'` 4-byte assertion
+     *   was looser than the gateway and would silently pass any
+     *   non-GIF payload that happened to start with those 4 bytes
+     *   (Copilot PR #11 round-4).
      *
-     * @return list<array{0: int, 1: string}>
+     * @return list<list<array{0: int, 1: string}>>
      */
-    private function expectedMagicSegmentsForMime(string $mime): array
+    private function expectedMagicVariantsForMime(string $mime): array
     {
         return match ($mime) {
-            'image/png' => [[0, "\x89PNG\r\n\x1a\n"]],
-            'image/jpeg' => [[0, "\xFF\xD8\xFF"]],
-            'image/webp' => [[0, 'RIFF'], [8, 'WEBP']],
-            'image/gif' => [[0, 'GIF8']],
-            default => [[0, "\x00"]],
+            'image/png' => [[[0, "\x89PNG\r\n\x1a\n"]]],
+            'image/jpeg' => [[[0, "\xFF\xD8\xFF"]]],
+            'image/webp' => [[[0, 'RIFF'], [8, 'WEBP']]],
+            'image/gif' => [
+                [[0, 'GIF87a']],
+                [[0, 'GIF89a']],
+            ],
+            default => [[[0, "\x00"]]],
         };
     }
 }

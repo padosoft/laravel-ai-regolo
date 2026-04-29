@@ -540,10 +540,18 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         // prefixes downstream and surface a wrong MIME — Copilot
         // also caught this in round-1.
         $bytes = base64_decode(substr($base64, 0, 24), strict: true);
-        if ($bytes === false || strlen($bytes) < 8) {
+        if ($bytes === false) {
             return 'image/png';
         }
 
+        // No global "< 8 bytes" early-exit: each format's prefix
+        // check below is self-bounded by `str_starts_with` (false on
+        // short input) and the per-format magic length varies — JPEG
+        // is only 3 bytes (`\xFF\xD8\xFF`), GIF is 6 (`GIF8?a`), PNG
+        // is 8, WebP is 12. A blanket `strlen < 8` would mislabel a
+        // valid-but-short JPEG/GIF payload as `image/png` (Copilot
+        // PR #11 round-4). The implicit per-format threshold lives
+        // in each `str_starts_with` call.
         if (str_starts_with($bytes, "\x89PNG\r\n\x1a\n")) {
             return 'image/png';
         }
