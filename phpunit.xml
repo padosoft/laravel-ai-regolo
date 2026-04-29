@@ -3,10 +3,23 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
-         cacheDirectory=".phpunit.cache">
+         cacheDirectory=".phpunit.cache"
+         defaultTestSuite="Unit">
     <testsuites>
+        <!-- Default suite: offline. Uses Http::fake() throughout —
+             never hits api.regolo.ai. CI runs this suite. -->
         <testsuite name="Unit">
             <directory>tests/Unit</directory>
+        </testsuite>
+
+        <!-- Opt-in live suite: hits the real Regolo API at
+             https://api.regolo.ai/v1. Requires REGOLO_API_KEY env var
+             (otherwise every test self-skips). NOT run in CI — invoked
+             explicitly by maintainers / the Seeweb team / community
+             contributors who want to verify wire compatibility against
+             production. See README "Running the live test suite". -->
+        <testsuite name="Live">
+            <directory>tests/Live</directory>
         </testsuite>
     </testsuites>
     <source>
