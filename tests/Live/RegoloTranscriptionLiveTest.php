@@ -136,7 +136,21 @@ final class RegoloTranscriptionLiveTest extends LiveTestCase
                 $detected = finfo_file($finfo, $path);
                 finfo_close($finfo);
 
-                if (is_string($detected) && str_starts_with($detected, 'audio/')) {
+                // Accept `audio/*` (the obvious case) AND
+                // `video/mp4` / `video/webm` — both are MPEG / WebM
+                // containers that frequently carry an audio-only
+                // stream. `finfo_file()` reports the container type
+                // (`video/...`) even when the payload is pure audio,
+                // so an `audio/*` strict gate would force the
+                // markTestSkipped branch on the very files we
+                // explicitly mapped via the extension table above.
+                // Whisper accepts the underlying audio stream
+                // regardless of how the container labels itself.
+                if (is_string($detected) && (
+                    str_starts_with($detected, 'audio/')
+                    || $detected === 'video/mp4'
+                    || $detected === 'video/webm'
+                )) {
                     return $detected;
                 }
             }
