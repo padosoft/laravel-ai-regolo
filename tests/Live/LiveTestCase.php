@@ -72,7 +72,7 @@ abstract class LiveTestCase extends TestCase
      * different superglobals depending on the host PHP config,
      * and CI runners (GitHub Actions, GitLab CI, etc.) sometimes
      * surface variables in only one of the three. Empty strings are
-     * treated as unset so a stray `EXPORT FOO=""` in a CI step does
+     * treated as unset so a stray `export FOO=""` in a CI step does
      * not fool the suite into thinking the key is configured.
      */
     protected function envValue(string $name): ?string
@@ -157,7 +157,19 @@ abstract class LiveTestCase extends TestCase
 
     protected function embeddingsDimensions(): int
     {
-        return (int) ($this->envValue('REGOLO_LIVE_EMBEDDINGS_DIM') ?? 4096);
+        $configured = $this->envValue('REGOLO_LIVE_EMBEDDINGS_DIM');
+
+        if ($configured === null || ! is_numeric($configured)) {
+            return 4096;
+        }
+
+        $dimensions = (int) $configured;
+
+        // Reject 0 / negative dimensions: an embedding vector with
+        // <=0 dimensions is meaningless and would surface as a
+        // confusing `Http::post('/embeddings', ['dimensions' => 0])`
+        // server error rather than a clear local validation failure.
+        return $dimensions >= 1 ? $dimensions : 4096;
     }
 
     protected function rerankingModel(): string

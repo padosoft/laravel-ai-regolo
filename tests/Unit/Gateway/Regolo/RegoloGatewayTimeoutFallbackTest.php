@@ -103,6 +103,7 @@ final class RegoloGatewayTimeoutFallbackTest extends TestCase
         $gateway = new RegoloGateway($this->app->make('events'));
 
         $method = new ReflectionMethod($gateway, 'providerTimeout');
+        $method->setAccessible(true);
 
         return $method->invoke($gateway, $provider);
     }
