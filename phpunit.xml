@@ -3,7 +3,8 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
-         cacheDirectory=".phpunit.cache">
+         cacheDirectory=".phpunit.cache"
+         defaultTestSuite="Unit">
     <testsuites>
         <!-- Default suite: offline. Uses Http::fake() throughout —
              never hits api.regolo.ai. CI runs this suite. -->

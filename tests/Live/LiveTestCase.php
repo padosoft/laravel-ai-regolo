@@ -92,7 +92,7 @@ abstract class LiveTestCase extends TestCase
                 'name' => 'regolo',
                 'key' => $this->envValue('REGOLO_API_KEY'),
                 'url' => $this->envValue('REGOLO_BASE_URL') ?? 'https://api.regolo.ai/v1',
-                'timeout' => (int) ($this->envValue('REGOLO_LIVE_TIMEOUT') ?? 60),
+                'timeout' => $this->liveTimeout(),
             ],
             events: $this->app->make(Dispatcher::class),
         );
@@ -101,6 +101,18 @@ abstract class LiveTestCase extends TestCase
     protected function liveGateway(): RegoloGateway
     {
         return new RegoloGateway($this->app->make(Dispatcher::class));
+    }
+
+    /**
+     * Per-call timeout used by the gateway methods. Live tests pass
+     * this value explicitly to `generateText` / `streamText` /
+     * `generateEmbeddings` / `rerank` so the `REGOLO_LIVE_TIMEOUT`
+     * env var actually controls the HTTP client deadline. Without
+     * this hop the gateway's own 60s default would silently win.
+     */
+    protected function liveTimeout(): int
+    {
+        return (int) ($this->envValue('REGOLO_LIVE_TIMEOUT') ?? 60);
     }
 
     protected function textModel(): string

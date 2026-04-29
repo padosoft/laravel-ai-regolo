@@ -89,7 +89,7 @@ The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or an
 - **Tool calling** — native function calling on models that support it; ReAct-style fallback on those that don't.
 - **Strict typing** — PHP 8.3+, readonly DTOs, fully-typed signatures, Pint-formatted, PHPStan level 6.
 - **CI matrix** — every push runs against PHP 8.3 / 8.4 / 8.5 × Laravel 12 / 13 (6 jobs). Laravel 11 is **not supported** — `laravel/ai` itself requires `illuminate/support: ^12.0|^13.0`.
-- **47 unit tests / 100 assertions** — every Python-SDK happy-path is ported, plus 36 robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn).
+- **53 unit tests / 115 assertions** — every Python-SDK happy-path is ported, plus 36 robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn).
 - 🚀 **AI vibe-coding pack ships in the box** — every release includes the [Padosoft Claude pack](#-ai-vibe-coding-pack-included) under `.claude/` (skills, rules, agents, slash-commands). The moment you `composer require` this package and open the project in Claude Code, the agent picks up Padosoft's house conventions automatically. **No other Laravel AI provider package ships this today.**
 - 🧪 **Opt-in live test suite** — point `REGOLO_API_KEY` at a real key and run `vendor/bin/phpunit --testsuite Live` to verify wire compatibility against `api.regolo.ai`. Default suite remains 100% offline. See [Running the live test suite](#running-the-live-test-suite-against-the-real-regolo-api).
 
@@ -400,12 +400,12 @@ The same pack is shared across `padosoft/laravel-ai-regolo`, `padosoft/laravel-f
 
 ### Default suite — offline, zero cost, runs everywhere
 
-The package ships **47 unit tests / 100 assertions** that run against a fake HTTP layer (`Http::fake()`), so the test suite never hits the real Regolo API and is safe to run in CI on every PR. No API key needed; no network needed; no money spent.
+The package ships **53 unit tests / 115 assertions** that run against a fake HTTP layer (`Http::fake()`), so the test suite never hits the real Regolo API and is safe to run in CI on every PR. No API key needed; no network needed; no money spent.
 
 ```bash
 composer install
 vendor/bin/phpunit
-# OK (47 tests, 100 assertions)
+# OK (53 tests, 115 assertions)
 ```
 
 Coverage breakdown:

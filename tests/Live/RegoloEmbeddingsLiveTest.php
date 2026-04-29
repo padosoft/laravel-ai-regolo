@@ -11,8 +11,9 @@ use Laravel\Ai\Responses\EmbeddingsResponse;
  * `api.regolo.ai`.
  *
  * Verifies the wire contract: the configured embedding model returns
- * a non-empty float vector, the dimension matches the model's
- * declared dimension, and `tokens` is non-zero.
+ * a non-empty float vector, the dimension matches the configured
+ * `REGOLO_LIVE_EMBEDDINGS_DIM` value (asserted explicitly), `tokens`
+ * is non-zero, and a batch preserves the input cardinality.
  */
 final class RegoloEmbeddingsLiveTest extends LiveTestCase
 {
@@ -23,11 +24,17 @@ final class RegoloEmbeddingsLiveTest extends LiveTestCase
             $this->embeddingsModel(),
             ['Roma è la capitale d\'Italia.'],
             $this->embeddingsDimensions(),
+            $this->liveTimeout(),
         );
 
         $this->assertInstanceOf(EmbeddingsResponse::class, $response);
         $this->assertCount(1, $response->embeddings, 'One input should produce one vector.');
         $this->assertNotEmpty($response->embeddings[0], 'Vector should not be empty.');
+        $this->assertCount(
+            $this->embeddingsDimensions(),
+            $response->embeddings[0],
+            'Vector dimension must match the configured REGOLO_LIVE_EMBEDDINGS_DIM value.',
+        );
         $this->assertGreaterThan(0, $response->tokens, 'Live response should report a non-zero token count.');
         $this->assertSame('regolo', $response->meta->provider);
         $this->assertSame($this->embeddingsModel(), $response->meta->model);
@@ -51,13 +58,17 @@ final class RegoloEmbeddingsLiveTest extends LiveTestCase
             $this->embeddingsModel(),
             $inputs,
             $this->embeddingsDimensions(),
+            $this->liveTimeout(),
         );
 
         $this->assertCount(count($inputs), $response->embeddings, 'Batch size should be preserved.');
 
-        $firstVectorDimension = count($response->embeddings[0]);
         foreach ($response->embeddings as $vector) {
-            $this->assertCount($firstVectorDimension, $vector, 'All vectors in the batch must share the same dimension.');
+            $this->assertCount(
+                $this->embeddingsDimensions(),
+                $vector,
+                'Every vector in the batch must match the configured REGOLO_LIVE_EMBEDDINGS_DIM value.',
+            );
         }
     }
 }

@@ -24,6 +24,7 @@ final class RegoloChatLiveTest extends LiveTestCase
             $this->textModel(),
             'You are a helpful assistant. Reply in one short sentence.',
             [new UserMessage('Say hello in Italian.')],
+            timeout: $this->liveTimeout(),
         );
 
         $this->assertInstanceOf(TextResponse::class, $response);
@@ -43,6 +44,7 @@ final class RegoloChatLiveTest extends LiveTestCase
             [
                 new UserMessage('My favourite city is Rome. Remember that.'),
             ],
+            timeout: $this->liveTimeout(),
         );
 
         $this->assertNotEmpty($response->text);
