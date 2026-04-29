@@ -31,11 +31,21 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  *
  * ## Optional overrides
  *
- *   REGOLO_BASE_URL                  default: https://api.regolo.ai/v1
- *   REGOLO_LIVE_TEXT_MODEL           default: Llama-3.1-8B-Instruct
- *   REGOLO_LIVE_EMBEDDINGS_MODEL     default: Qwen3-Embedding-8B
- *   REGOLO_LIVE_RERANKING_MODEL      default: jina-reranker-v2
- *   REGOLO_LIVE_TIMEOUT              default: 60
+ *   REGOLO_BASE_URL                       default: https://api.regolo.ai/v1
+ *   REGOLO_LIVE_TEXT_MODEL                default: Llama-3.1-8B-Instruct
+ *   REGOLO_LIVE_EMBEDDINGS_MODEL          default: Qwen3-Embedding-8B
+ *   REGOLO_LIVE_RERANKING_MODEL           default: jina-reranker-v2
+ *   REGOLO_LIVE_IMAGE_MODEL               default: Qwen-Image
+ *   REGOLO_LIVE_TRANSCRIPTION_MODEL       default: faster-whisper-large-v3
+ *   REGOLO_LIVE_TIMEOUT                   default: 60
+ *
+ * Multimodal-only — the test self-skips when these are unset:
+ *
+ *   REGOLO_LIVE_AUDIO_MODEL               TTS model id from Seeweb
+ *                                         (catalogue not on /v1/models)
+ *   REGOLO_LIVE_AUDIO_VOICE               default: alloy
+ *   REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH  path to a real speech file
+ *   REGOLO_LIVE_TRANSCRIPTION_LANGUAGE    optional ISO 639-1 hint
  *
  * Embedding vector dimension is **model-defined** — the live tests do
  * not attempt to override it. `RegoloGateway::generateEmbeddings()`

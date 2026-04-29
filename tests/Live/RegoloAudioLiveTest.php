@@ -68,9 +68,20 @@ final class RegoloAudioLiveTest extends LiveTestCase
         // an `ID3` tag prefix or the canonical MPEG sync word
         // (`\xFF\xFB`/`\xFF\xF3`/`\xFF\xF2`). Accept either so a
         // codec switch on Regolo's side does not flake the test.
+        // Guard against a < 3-byte payload first — `$decoded[1]` on
+        // a 1-byte string emits an "Uninitialized string offset"
+        // notice that bubbles up as a test risky / failed status on
+        // strict PHP error reporting.
+        $this->assertGreaterThanOrEqual(
+            3,
+            strlen($decoded),
+            'Decoded MP3 must be at least 3 bytes for the signature check '.
+            '(ID3 tag prefix or 2-byte MPEG sync word). A shorter payload '.
+            'is itself a regression worth catching.',
+        );
         $head = substr($decoded, 0, 3);
-        $first = ord($decoded[0] ?? "\x00");
-        $second = ord($decoded[1] ?? "\x00");
+        $first = ord($decoded[0]);
+        $second = ord($decoded[1]);
         $this->assertTrue(
             $head === 'ID3' || ($first === 0xFF && ($second & 0xE0) === 0xE0),
             sprintf(

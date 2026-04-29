@@ -16,9 +16,19 @@ use Laravel\Ai\Responses\TranscriptionResponse;
  * meaningful — Whisper-style models will produce empty / nonsense
  * output on synthetic silence or sine waves, and shipping a
  * pre-recorded fixture would bloat the package distribution. Point
- * the env var at any short MP3 / WAV / OGG / FLAC file the operator
- * has on disk (the repo's `docs/audio-fixture-howto.md` walks through
- * generating one with `ffmpeg` or recording a 5-second clip).
+ * the env var at any short MP3 / WAV / OGG / FLAC / M4A clip the
+ * operator has on disk — even a single phrase recorded on a phone
+ * works. Generate one quickly with:
+ *
+ *     ffmpeg -f lavfi -t 5 -i "sine=frequency=440" /tmp/silence.mp3   # WON'T transcribe
+ *     # or, on macOS:
+ *     say -o /tmp/sample.aiff "this is a regolo live test" && \
+ *         ffmpeg -i /tmp/sample.aiff /tmp/sample.mp3
+ *     # or, on Linux with espeak-ng:
+ *     espeak-ng -w /tmp/sample.wav "this is a regolo live test"
+ *
+ * Synthetic silence / sine waves transcribe to empty `text` so use
+ * a real speech sample (the recipes above produce a usable one).
  *
  * Recommended fixture: 5-15 seconds of clearly enunciated Italian or
  * English speech, ≤ 1 MB. Whisper handles longer clips but the test
