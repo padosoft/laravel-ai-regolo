@@ -496,7 +496,7 @@ Tests: 6, Assertions: 0, Skipped: 6.
 |-----------------------------------|------------------------------------------------------------------------------------|---------------|
 | `RegoloChatLiveTest`              | `POST /v1/chat/completions` returns non-empty `text` + non-zero token usage        | ~200 tokens   |
 | `RegoloStreamingLiveTest`         | `POST /v1/chat/completions` with `stream: true` emits SSE → `TextDelta` events     | ~150 tokens   |
-| `RegoloEmbeddingsLiveTest`        | `POST /v1/embeddings` returns vectors of the configured dimension; batch preserves | ~100 tokens   |
+| `RegoloEmbeddingsLiveTest`        | `POST /v1/embeddings` returns non-empty vectors with uniform length across a batch | ~100 tokens   |
 | `RegoloRerankLiveTest`            | `POST /v1/rerank` orders documents by relevance, top-1 matches the obvious answer  | minimal       |
 
 **Total cost per run**: well under €0.01 with the default small-model selection. Pick a heavier text model via `REGOLO_LIVE_TEXT_MODEL` if you want to validate a specific catalogue entry — the cost scales linearly with the model.
