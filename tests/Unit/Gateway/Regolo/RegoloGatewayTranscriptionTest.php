@@ -1,0 +1,238 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Padosoft\LaravelAiRegolo\Tests\Unit\Gateway\Regolo;
+
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Laravel\Ai\AiServiceProvider;
+use Laravel\Ai\Files\Base64Audio;
+use Orchestra\Testbench\TestCase;
+use Padosoft\LaravelAiRegolo\Gateway\Regolo\RegoloGateway;
+use Padosoft\LaravelAiRegolo\LaravelAiRegoloServiceProvider;
+use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
+
+/**
+ * Audio transcription (speech-to-text) coverage for the Regolo
+ * provider.
+ *
+ * Regolo exposes `POST /v1/audio/transcriptions` mirroring OpenAI
+ * Whisper's wire shape. The default catalogue model is
+ * `faster-whisper-large-v3`. The endpoint accepts multipart audio
+ * uploads and returns either `{ text }` (plain) or
+ * `{ text, segments: [...] }` (when `response_format=diarized_json`
+ * is supplied for a diarization-capable model).
+ */
+final class RegoloGatewayTranscriptionTest extends TestCase
+{
+    public function test_generate_transcription_returns_plain_text_for_default_response_format(): void
+    {
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response([
+                'text' => 'Buongiorno, sono Marco e oggi parliamo di Regolo.',
+            ]),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode("\x00fake-audio-bytes"), 'audio/mpeg');
+
+        $response = $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+        );
+
+        $this->assertSame('Buongiorno, sono Marco e oggi parliamo di Regolo.', $response->text);
+        $this->assertCount(0, $response->segments);
+        $this->assertSame('regolo', $response->meta->provider);
+        $this->assertSame('faster-whisper-large-v3', $response->meta->model);
+    }
+
+    public function test_generate_transcription_forwards_language_hint(): void
+    {
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            language: 'it',
+        );
+
+        Http::assertSent(function (Request $request) {
+            return str_ends_with($request->url(), '/audio/transcriptions')
+                && $request->method() === 'POST'
+                && $this->multipartContains($request, 'name="model"', 'faster-whisper-large-v3')
+                && $this->multipartContains($request, 'name="language"', 'it')
+                && $this->multipartContains($request, 'name="response_format"', 'json');
+        });
+    }
+
+    public function test_generate_transcription_diarize_flag_switches_response_format(): void
+    {
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response([
+                'text' => 'Speaker 1: Ciao. Speaker 2: Salve.',
+                'segments' => [
+                    [
+                        'text' => 'Ciao.',
+                        'speaker' => 'speaker-1',
+                        'start' => 0.0,
+                        'end' => 0.7,
+                    ],
+                    [
+                        'text' => 'Salve.',
+                        'speaker' => 'speaker-2',
+                        'start' => 1.2,
+                        'end' => 1.9,
+                    ],
+                ],
+                'usage' => ['input_tokens' => 5, 'total_tokens' => 12],
+            ]),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/ogg');
+
+        $response = $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3-diarize',
+            $audio,
+            diarize: true,
+        );
+
+        $this->assertCount(2, $response->segments);
+        $this->assertSame('Ciao.', $response->segments[0]->text);
+        $this->assertSame('speaker-1', $response->segments[0]->speaker);
+        $this->assertEqualsWithDelta(0.0, $response->segments[0]->startSeconds, 0.001);
+        $this->assertEqualsWithDelta(0.7, $response->segments[0]->endSeconds, 0.001);
+        // The SDK's Usage DTO uses promptTokens / completionTokens
+        // positional fields. The gateway maps Whisper's input_tokens →
+        // promptTokens (positional 0) and total_tokens → completionTokens
+        // (positional 1) for now; future SDK versions may add a
+        // dedicated audio-token field. See `Usage::__construct`.
+        $this->assertSame(5, $response->usage->promptTokens);
+        $this->assertSame(12, $response->usage->completionTokens);
+
+        Http::assertSent(function (Request $request) {
+            return $this->multipartContains($request, 'name="response_format"', 'diarized_json');
+        });
+    }
+
+    public function test_generate_transcription_omits_language_when_null(): void
+    {
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'auto']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/mpeg');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+        );
+
+        Http::assertSent(function (Request $request) {
+            // Whisper auto-detects when `language` is omitted; sending
+            // an explicit `null` would surface as a 422. The multipart
+            // body therefore must NOT contain a `language` part.
+            return ! str_contains((string) $request->body(), 'name="language"');
+        });
+    }
+
+    public function test_default_transcription_model_falls_back_to_faster_whisper(): void
+    {
+        $provider = $this->makeProvider([
+            'models' => [
+                'text' => ['default' => 'Llama-3.1-8B-Instruct'],
+                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
+                'reranking' => ['default' => 'jina-reranker-v2'],
+                // transcription entry intentionally absent
+            ],
+        ]);
+
+        $this->assertSame('faster-whisper-large-v3', $provider->defaultTranscriptionModel());
+    }
+
+    public function test_default_transcription_model_uses_config_when_provided(): void
+    {
+        $provider = $this->makeProvider([
+            'models' => [
+                'text' => ['default' => 'Llama-3.1-8B-Instruct'],
+                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
+                'reranking' => ['default' => 'jina-reranker-v2'],
+                'transcription' => ['default' => 'whisper-large-v3-italian'],
+            ],
+        ]);
+
+        $this->assertSame('whisper-large-v3-italian', $provider->defaultTranscriptionModel());
+    }
+
+    /**
+     * @return array<int, class-string>
+     */
+    protected function getPackageProviders($app): array
+    {
+        return [
+            AiServiceProvider::class,
+            LaravelAiRegoloServiceProvider::class,
+        ];
+    }
+
+    /**
+     * Assert that the multipart request body contains a part with the
+     * given disposition fragment AND the expected value. Multipart
+     * bodies are not parseable via `Request::data()` the way URL-
+     * encoded / JSON bodies are, so we use substring containment as
+     * the cheapest reliable check: the multipart envelope renders
+     * each part as
+     *
+     *     --<boundary>
+     *     Content-Disposition: form-data; name="<name>"
+     *
+     *     <value>
+     *
+     * so the disposition fragment + the value both appearing in the
+     * raw body proves the field reached the wire with that contents.
+     */
+    private function multipartContains(Request $request, string $dispositionFragment, string $expectedValue): bool
+    {
+        $body = (string) $request->body();
+
+        return str_contains($body, $dispositionFragment)
+            && str_contains($body, $expectedValue);
+    }
+
+    /**
+     * @param  array<string, mixed>  $configOverride
+     */
+    private function makeProvider(array $configOverride = []): RegoloProvider
+    {
+        $config = array_merge([
+            'driver' => 'regolo',
+            'name' => 'regolo',
+            'key' => 'test-api-key',
+            'url' => 'https://api.regolo.test/v1',
+            'models' => [
+                'text' => ['default' => 'Llama-3.1-8B-Instruct'],
+                'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
+                'reranking' => ['default' => 'jina-reranker-v2'],
+                'transcription' => ['default' => 'faster-whisper-large-v3'],
+            ],
+        ], $configOverride);
+
+        return new RegoloProvider($config, $this->app->make('events'));
+    }
+}
