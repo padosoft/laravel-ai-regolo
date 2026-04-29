@@ -595,7 +595,7 @@ Tests: 9, Assertions: 0, Skipped: 9.
 | `RegoloStreamingLiveTest`         | `POST /v1/chat/completions` with `stream: true` emits SSE → `TextDelta` events     | ~150 tokens   |
 | `RegoloEmbeddingsLiveTest`        | `POST /v1/embeddings` returns non-empty vectors with uniform length across a batch | ~100 tokens   |
 | `RegoloRerankLiveTest`            | `POST /v1/rerank` orders documents by relevance, top-1 matches the obvious answer  | minimal       |
-| `RegoloImageLiveTest`             | `POST /v1/images/generations` (Qwen-Image) returns valid base64 PNG (file signature checked) | ~€0.001 |
+| `RegoloImageLiveTest`             | `POST /v1/images/generations` (Qwen-Image) returns a valid base64 image — `image/png`, `image/jpeg`, `image/webp`, or `image/gif`, cross-checked against the canonical magic-byte signature for the gateway-claimed MIME (`Qwen-Image` empirically returns JPEG today) | ~€0.001 |
 | `RegoloAudioLiveTest`             | `POST /v1/audio/speech` (TTS) returns valid base64 MP3 (ID3 tag or MPEG sync word) — **self-skips** unless `REGOLO_LIVE_AUDIO_MODEL` is set, since Regolo's TTS catalogue is not on `/v1/models` yet | minimal |
 | `RegoloTranscriptionLiveTest`     | `POST /v1/audio/transcriptions` (faster-whisper-large-v3) returns non-empty `text` — **self-skips** unless `REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH` points at a real speech file | minimal |
 

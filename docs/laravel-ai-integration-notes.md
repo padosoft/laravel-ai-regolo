@@ -193,7 +193,7 @@ Regolo model-management endpoints (`load_model_for_inference`, `get_loaded_model
 5. **Streaming** — yield `StreamEvent` instances from a `Generator` inside `StreamableAgentResponse` via the SDK's `StreamsText` concern. Verify that `usingVercelDataProtocol()` works out of the box for AskMyDocs's W3 frontend migration to `@ai-sdk/react`.
 6. **ReAct fallback for tool calls** when the underlying Regolo open model lacks native function calling. The wrapper detects support based on the `/v1/models` metadata at startup; per-request override available via `providerOptions['toolCallStrategy' => 'react'|'native'|'auto']`.
 7. **Auth** — `Bearer ${REGOLO_API_KEY}`.
-8. **Defaults** match the upstream Python SDK (`Llama-3.1-8B-Instruct`, `Qwen3-Embedding-8B`, `jina-reranker-v2`) so PHP users get parity with Python users out of the box.
+8. **Defaults** match the catalogue Regolo serves at `/v1/models` today (`Llama-3.1-8B-Instruct`, `Qwen3-Embedding-8B`, `Qwen3-Reranker-4B`) so PHP users get out-of-the-box parity with whatever Seeweb is publishing — the reranker default was bumped from `jina-reranker-v2` to `Qwen3-Reranker-4B` in v0.2.2 after the prior name returned HTTP 400 against the live API.
 
 ---
 

@@ -29,7 +29,7 @@ Repo: [regolo-ai/python-client](https://github.com/regolo-ai/python-client) — 
 - chat: `Llama-3.1-8B-Instruct`
 - image: `Qwen-Image`
 - embeddings: `Qwen3-Embedding-8B`
-- reranker: `jina-reranker-v2`
+- reranker: `Qwen3-Reranker-4B` (the package default since v0.2.2; the Python SDK's `regolo` examples ship `jina-reranker-v2`, but that name returns HTTP 400 against the current `/v1/models` catalogue, so the PHP package was switched to the catalogue-listed `Qwen3-Reranker-4B` instead — same family of cross-encoder reranker)
 
 ### Coverage gaps in the Python SDK
 

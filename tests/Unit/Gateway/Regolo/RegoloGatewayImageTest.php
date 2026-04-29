@@ -173,7 +173,7 @@ final class RegoloGatewayImageTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 'image' => ['default' => 'Qwen-Image-Heavy'],
             ],
         ]);
@@ -187,7 +187,7 @@ final class RegoloGatewayImageTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 // image entry intentionally absent
             ],
         ]);
@@ -240,7 +240,7 @@ final class RegoloGatewayImageTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 'image' => ['default' => 'Qwen-Image'],
             ],
         ], $configOverride);
