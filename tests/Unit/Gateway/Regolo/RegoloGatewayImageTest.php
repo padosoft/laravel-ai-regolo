@@ -121,6 +121,35 @@ final class RegoloGatewayImageTest extends TestCase
         );
     }
 
+    public function test_image_timeout_precedence_provider_config_then_constant(): void
+    {
+        // Per-call timeout omitted + provider config['timeout'] = 240
+        // → 240 wins (the consuming Laravel app explicitly chose a
+        // longer ceiling and we honour it).
+        $providerWithTimeout = $this->makeProvider(['timeout' => 240]);
+        $this->assertSame(240, $this->resolveImageTimeout(null, $providerWithTimeout));
+
+        // Per-call timeout omitted + provider config has NO timeout
+        // entry → fallback to IMAGE_DEFAULT_TIMEOUT_SECONDS (120).
+        $providerWithoutTimeout = $this->makeProvider(); // default fixture has no 'timeout' key
+        $this->assertSame(120, $this->resolveImageTimeout(null, $providerWithoutTimeout));
+
+        // Per-call timeout 30 + provider config['timeout'] = 240
+        // → 30 wins (caller's explicit override always trumps both).
+        $this->assertSame(30, $this->resolveImageTimeout(30, $providerWithTimeout));
+
+        // Provider config['timeout'] = 0 (invalid) → falls through to
+        // the 120s package floor rather than `Http::timeout(0)` (which
+        // means "no timeout at all" on the underlying Guzzle client).
+        $providerWithZero = $this->makeProvider(['timeout' => 0]);
+        $this->assertSame(120, $this->resolveImageTimeout(null, $providerWithZero));
+
+        // Provider config['timeout'] = "abc" (non-numeric) → same
+        // safe-default fallback as the zero / negative cases.
+        $providerWithGarbage = $this->makeProvider(['timeout' => 'abc']);
+        $this->assertSame(120, $this->resolveImageTimeout(null, $providerWithGarbage));
+    }
+
     public function test_image_default_timeout_constant_is_120_seconds(): void
     {
         // `generateImage` applies `self::IMAGE_DEFAULT_TIMEOUT_SECONDS`
@@ -177,6 +206,25 @@ final class RegoloGatewayImageTest extends TestCase
             AiServiceProvider::class,
             LaravelAiRegoloServiceProvider::class,
         ];
+    }
+
+    /**
+     * Reflective shim around the gateway's private
+     * `imageEffectiveTimeout()` helper. The method is private because
+     * the precedence chain it encodes is an implementation detail of
+     * `generateImage` — but it's exactly the boundary between
+     * caller / provider-config / package-default that callers are
+     * most likely to misconfigure, so the unit suite needs to lock it
+     * down. `setAccessible(true)` is required because the gateway
+     * class is `final` (no subclass spy is possible).
+     */
+    private function resolveImageTimeout(?int $timeout, RegoloProvider $provider): int
+    {
+        $gateway = new RegoloGateway($this->app->make('events'));
+        $method = new \ReflectionMethod($gateway, 'imageEffectiveTimeout');
+        $method->setAccessible(true);
+
+        return $method->invoke($gateway, $timeout, $provider);
     }
 
     /**

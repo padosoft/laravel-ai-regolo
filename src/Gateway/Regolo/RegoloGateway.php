@@ -306,7 +306,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
 
         $response = $this->withErrorHandling(
             $provider->name(),
-            fn () => $this->client($provider, $timeout ?? self::IMAGE_DEFAULT_TIMEOUT_SECONDS)->post('images/generations', $body),
+            fn () => $this->client($provider, $this->imageEffectiveTimeout($timeout, $provider))->post('images/generations', $body),
         );
 
         $data = $response->json();
@@ -461,5 +461,38 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         };
 
         return "audio.{$extension}";
+    }
+
+    /**
+     * Resolve the effective timeout for `generateImage` honoring the
+     * full precedence chain:
+     *
+     *  1. per-call `$timeout` argument (caller wins);
+     *  2. provider-level `additionalConfiguration()['timeout']` if the
+     *     consuming app has set `providers.regolo.timeout` /
+     *     `REGOLO_TIMEOUT` to a valid positive integer;
+     *  3. `IMAGE_DEFAULT_TIMEOUT_SECONDS` (120 s) — only used when
+     *     **nothing** has been configured upstream.
+     *
+     * The image gateway used to short-circuit straight to step 3 the
+     * moment `$timeout` was `null`, which silently bypassed an
+     * explicit `REGOLO_TIMEOUT=240` from the Laravel app and caused
+     * inconsistency with `generateText` / `generateEmbeddings` that
+     * both honour the provider config. This helper restores the
+     * canonical precedence; callers who genuinely want the package
+     * default just leave the provider config unset.
+     */
+    private function imageEffectiveTimeout(?int $timeout, ImageProvider $provider): int
+    {
+        if ($timeout !== null) {
+            return $timeout;
+        }
+
+        $providerConfigured = $provider->additionalConfiguration()['timeout'] ?? null;
+        if (is_numeric($providerConfigured) && (int) $providerConfigured >= 1) {
+            return (int) $providerConfigured;
+        }
+
+        return self::IMAGE_DEFAULT_TIMEOUT_SECONDS;
     }
 }

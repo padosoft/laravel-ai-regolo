@@ -14,10 +14,11 @@ parameters:
           message: '#expects Laravel\\Ai\\Providers\\Provider, Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking|Image|Audio|Transcription)Provider given#'
           path: src/Gateway/Regolo/*
 
-        # name() / driver() are declared on the abstract Provider, not on
-        # the capability interfaces — same registry-flow argument as above.
+        # name() / driver() / additionalConfiguration() are declared on
+        # the abstract Provider, not on the capability interfaces — same
+        # registry-flow argument as above.
         - identifier: method.notFound
-          message: '#Call to an undefined method Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking|Image|Audio|Transcription)Provider::name\(\)#'
+          message: '#Call to an undefined method Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking|Image|Audio|Transcription)Provider::(name|driver|additionalConfiguration)\(\)#'
           path: src/Gateway/Regolo/*
 
         # Upstream Mistral concern keeps a `!== null` guard on a typed

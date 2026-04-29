@@ -261,9 +261,11 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
             return (string) $quality;
         }
 
-        if (is_bool($quality)) {
-            return $quality ? 'true' : 'false';
-        }
+        // Booleans deliberately fall through to silent-drop. Sending
+        // `'true'` or `'false'` to `/v1/images/generations` is an
+        // invalid wire value (the upstream returns 422), and there is
+        // no useful boolean→quality mapping a Laravel app could mean.
+        // Better to omit the field and let the model use its default.
 
         return null;
     }
