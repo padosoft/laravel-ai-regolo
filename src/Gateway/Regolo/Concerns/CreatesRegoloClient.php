@@ -22,6 +22,18 @@ use Laravel\Ai\Providers\Provider;
  * (`https://api.regolo.ai/v1`) and is overridable via the provider's
  * `additionalConfiguration()['url']` — set in `config/ai.php`'s
  * `providers.regolo.url` entry.
+ *
+ * Timeout precedence (highest to lowest):
+ *   1. `$timeout` argument passed by the gateway method (e.g.
+ *      `generateText(..., timeout: 30)`)
+ *   2. `additionalConfiguration()['timeout']` from `config/ai.php`'s
+ *      `providers.regolo.timeout` entry
+ *   3. 60-second hard default
+ *
+ * Step 2 is what makes `RegoloGateway::rerank()` honour the provider's
+ * configured timeout — `rerank()` does not accept a per-call timeout
+ * parameter in its SDK signature, so it always reaches this method
+ * with `$timeout = null` and falls through to the provider config.
  */
 trait CreatesRegoloClient
 {
@@ -29,7 +41,7 @@ trait CreatesRegoloClient
     {
         return Http::baseUrl($this->baseUrl($provider))
             ->withToken($provider->providerCredentials()['key'])
-            ->timeout($timeout ?? 60)
+            ->timeout($timeout ?? $this->providerTimeout($provider))
             ->throw();
     }
 
@@ -39,5 +51,21 @@ trait CreatesRegoloClient
             $provider->additionalConfiguration()['url'] ?? 'https://api.regolo.ai/v1',
             '/',
         );
+    }
+
+    /**
+     * Read the provider-level default timeout (seconds) from
+     * `config/ai.php`'s `providers.regolo.timeout`. Falls back to 60s
+     * when the entry is missing.
+     */
+    protected function providerTimeout(Provider $provider): int
+    {
+        $configured = $provider->additionalConfiguration()['timeout'] ?? null;
+
+        if ($configured === null || $configured === '') {
+            return 60;
+        }
+
+        return (int) $configured;
     }
 }

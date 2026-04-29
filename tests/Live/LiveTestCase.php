@@ -66,19 +66,26 @@ abstract class LiveTestCase extends TestCase
     }
 
     /**
-     * Read an env var via getenv() OR $_ENV — Testbench / phpunit
-     * environments do not always populate one when the developer set
-     * the other.
+     * Read an env var via every channel PHPUnit/Testbench may have
+     * populated: `getenv()`, `$_ENV[]`, `$_SERVER[]`. PHPUnit's
+     * `<server>` and `<env>` blocks in phpunit.xml inject into
+     * different superglobals depending on the host PHP config,
+     * and CI runners (GitHub Actions, GitLab CI, etc.) sometimes
+     * surface variables in only one of the three. Empty strings are
+     * treated as unset so a stray `EXPORT FOO=""` in a CI step does
+     * not fool the suite into thinking the key is configured.
      */
     protected function envValue(string $name): ?string
     {
-        $value = getenv($name);
+        foreach ([getenv($name), $_ENV[$name] ?? null, $_SERVER[$name] ?? null] as $candidate) {
+            if ($candidate === false || $candidate === null || $candidate === '') {
+                continue;
+            }
 
-        if ($value !== false && $value !== '') {
-            return $value;
+            return (string) $candidate;
         }
 
-        return $_ENV[$name] ?? null;
+        return null;
     }
 
     /**
@@ -110,12 +117,17 @@ abstract class LiveTestCase extends TestCase
      * Three of the four SDK gateway methods accept a per-call timeout
      * argument — `generateText`, `streamText`, `generateEmbeddings` —
      * and the chat / streaming / embeddings live tests pass this
-     * value through explicitly. `RegoloGateway::rerank()` does not
-     * accept a per-call timeout in its SDK signature; it picks the
-     * value up from the provider's HTTP-client config, which is
-     * already set via `liveProvider()`'s `'timeout' => ...` entry.
-     * The env var therefore controls every live request, just via
-     * two paths.
+     * value through explicitly.
+     *
+     * `RegoloGateway::rerank()` does not accept a per-call timeout
+     * in its SDK signature, so it reaches the HTTP client builder
+     * with `$timeout = null`. The builder (`CreatesRegoloClient::client`)
+     * therefore falls through to the provider's
+     * `additionalConfiguration()['timeout']` entry — which
+     * `liveProvider()` sets to `$this->liveTimeout()` — before
+     * landing on the 60-second hard default. The env var controls
+     * every live request, just via two paths (per-call argument for
+     * three methods; provider config + builder fallback for rerank).
      */
     protected function liveTimeout(): int
     {

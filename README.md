@@ -469,7 +469,7 @@ vendor/bin/phpunit --testsuite Live
 Expected output (with a working key + the default models):
 
 ```
-PHPUnit 12.x by Sebastian Bergmann.
+PHPUnit by Sebastian Bergmann.
 
 ........                                  6 / 6 (100%)
 
@@ -481,7 +481,7 @@ OK (6 tests, ~25 assertions)
 If the env var is unset:
 
 ```
-PHPUnit 12.x by Sebastian Bergmann.
+PHPUnit by Sebastian Bergmann.
 
 ssssss                                    6 / 6 (100%)
 
