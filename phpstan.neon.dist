@@ -5,18 +5,20 @@ parameters:
     treatPhpDocTypesAsCertain: false
     ignoreErrors:
         # The capability interfaces (TextProvider, EmbeddingProvider,
-        # RerankingProvider) are guaranteed to be implemented by a class
-        # extending the abstract Provider — that is the SDK's contract.
-        # PHPStan cannot follow the registry-binding flow that hands the
-        # interface-typed argument to a Provider-typed concern.
+        # RerankingProvider, ImageProvider, AudioProvider,
+        # TranscriptionProvider) are guaranteed to be implemented by a
+        # class extending the abstract Provider — that is the SDK's
+        # contract. PHPStan cannot follow the registry-binding flow that
+        # hands the interface-typed argument to a Provider-typed concern.
         - identifier: argument.type
-          message: '#expects Laravel\\Ai\\Providers\\Provider, Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking)Provider given#'
+          message: '#expects Laravel\\Ai\\Providers\\Provider, Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking|Image|Audio|Transcription)Provider given#'
           path: src/Gateway/Regolo/*
 
-        # name() / driver() are declared on the abstract Provider, not on
-        # the capability interfaces — same registry-flow argument as above.
+        # name() / driver() / additionalConfiguration() are declared on
+        # the abstract Provider, not on the capability interfaces — same
+        # registry-flow argument as above.
         - identifier: method.notFound
-          message: '#Call to an undefined method Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking)Provider::name\(\)#'
+          message: '#Call to an undefined method Laravel\\Ai\\Contracts\\Providers\\(Text|Embedding|Reranking|Image|Audio|Transcription)Provider::(name|driver|additionalConfiguration)\(\)#'
           path: src/Gateway/Regolo/*
 
         # Upstream Mistral concern keeps a `!== null` guard on a typed

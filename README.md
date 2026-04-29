@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>The fastest way to ship a Laravel app on Italian sovereign AI infrastructure.</strong><br/>
-  A first-class <a href="https://regolo.ai">Seeweb Regolo</a> provider for the official <a href="https://github.com/laravel/ai"><code>laravel/ai</code></a> SDK — chat, embeddings, reranking, plus a 30+ open-model catalog hosted entirely in Italy.
+  A first-class <a href="https://regolo.ai">Seeweb Regolo</a> provider for the official <a href="https://github.com/laravel/ai"><code>laravel/ai</code></a> SDK — chat, embeddings, reranking, image generation, audio transcription, text-to-speech, plus a 30+ open-model catalog hosted entirely in Italy.
 </p>
 
 <p align="center">
@@ -85,11 +85,14 @@ The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or an
 - **Chat completion + streaming** via `Agent::for(...)->using('regolo', $model)->prompt()` and `->stream()`.
 - **Embeddings** via `Embeddings::for($inputs)->generate('regolo', $model)`.
 - **Reranking** via `Reranking::of($docs)->limit($k)->rerank($query, 'regolo', $model)`.
-- **Open-model catalog** with Italian sovereign hosting (Llama-3.x, Qwen-3, Mistral, Gemma, Phi, DeepSeek, more).
+- **Image generation** via `Image::of($prompt)->generate('regolo', $model)` — default model `Qwen-Image`, OpenAI-compatible request shape.
+- **Audio transcription (STT)** via `Transcription::of($audio)->using('regolo', $model)->generate()` — default model `faster-whisper-large-v3`, supports per-segment diarization.
+- **Audio generation (TTS)** via `Audio::for($text)->generate('regolo', $model)` — wired against `POST /v1/audio/speech`; the upstream catalogue is not fully public yet, so the model id must be supplied explicitly.
+- **Open-model catalog** with Italian sovereign hosting (Llama-3.x, Qwen-3, Mistral, Gemma, Phi, DeepSeek, Qwen-Image, faster-whisper, more).
 - **Tool calling** — native function calling on models that support it; ReAct-style fallback on those that don't.
 - **Strict typing** — PHP 8.3+, readonly DTOs, fully-typed signatures, Pint-formatted, PHPStan level 6.
 - **CI matrix** — every push runs against PHP 8.3 / 8.4 / 8.5 × Laravel 12 / 13 (6 jobs). Laravel 11 is **not supported** — `laravel/ai` itself requires `illuminate/support: ^12.0|^13.0`.
-- **61 unit tests / 123 assertions** — every Python-SDK happy-path is ported, plus 44 robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn / timeout-fallback misconfiguration).
+- **81 unit tests / 168 assertions** — every Python-SDK happy-path is ported, plus 60+ robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn / timeout-fallback misconfiguration / image-edit rejection / multipart-language omission / diarization toggling).
 - 🚀 **AI vibe-coding pack ships in the box** — every release includes the [Padosoft Claude pack](#ai-vibe-coding-pack-included) under `.claude/` (skills, rules, agents, slash-commands). The moment you `composer require` this package and open the project in Claude Code, the agent picks up Padosoft's house conventions automatically. **No other Laravel AI provider package ships this today.**
 - 🧪 **Opt-in live test suite** — point `REGOLO_API_KEY` at a real key and run `vendor/bin/phpunit --testsuite Live` to verify wire compatibility against `api.regolo.ai`. Default suite remains 100% offline. See [Running the live test suite](#running-the-live-test-suite-against-the-real-regolo-api).
 
@@ -109,7 +112,7 @@ If you are evaluating how to call Regolo from a Laravel app, here are the realis
 | Same API as 14+ other providers             |           ❌           |        ✅         |          ❌           |               ✅                |
 | First-class Laravel facade & queue support  |           ❌           |        ✅         |          ⚠️ partial    |               ✅                |
 | Vercel AI SDK UI compatibility (streaming)  |           ❌           |        ❌         |          ❌           |               ✅                |
-| 61 tests / 6-cell CI matrix                 |           ❌           |       N/A         |          ❌           |               ✅                |
+| 81 tests / 6-cell CI matrix                 |           ❌           |       N/A         |          ❌           |               ✅                |
 | Maintenance burden when SDK ships features  |           you          |       N/A         |          you          |        you get them free        |
 
 **Bottom line:** if you want Regolo behind the same API surface that powers OpenAI, Anthropic, Gemini, Mistral, and Ollama in `laravel/ai`, this is the only package that does it.
@@ -328,6 +331,9 @@ The original `index` and `document` are preserved on each result so you can map 
 | `ai.providers.regolo.models.embeddings.default`    | string  | `Qwen3-Embedding-8B`          | Used by `Embeddings::for()->generate('regolo')`.                      |
 | `ai.providers.regolo.models.embeddings.dimensions` | int     | `4096`                        | Embedding vector dimension. Must match downstream vector store.       |
 | `ai.providers.regolo.models.reranking.default`     | string  | `jina-reranker-v2`            | Used by `Reranking::of()->rerank(..., 'regolo')`.                     |
+| `ai.providers.regolo.models.image.default`         | string  | `Qwen-Image`                  | Used by `Image::of(...)->generate('regolo')`. Wire to `env('REGOLO_IMAGE_MODEL', 'Qwen-Image')` in `config/ai.php` for env-var override. |
+| `ai.providers.regolo.models.transcription.default` | string  | `faster-whisper-large-v3`     | Used by `Transcription::of($audio)->using('regolo')->generate()`. Wire to `env('REGOLO_TRANSCRIPTION_MODEL', 'faster-whisper-large-v3')`. |
+| `ai.providers.regolo.models.audio.default`         | string  | _empty_                       | Used by `Audio::for(...)->generate('regolo')` (TTS). Regolo's TTS catalogue is not on `GET /v1/models` yet; pass the model id explicitly. Wire to `env('REGOLO_AUDIO_MODEL')`. |
 
 ## Architecture
 
@@ -400,22 +406,26 @@ The same pack is shared across `padosoft/laravel-ai-regolo`, `padosoft/laravel-f
 
 ### Default suite — offline, zero cost, runs everywhere
 
-The package ships **61 unit tests / 123 assertions** that run against a fake HTTP layer (`Http::fake()`), so the test suite never hits the real Regolo API and is safe to run in CI on every PR. No API key needed; no network needed; no money spent.
+The package ships **81 unit tests / 168 assertions** that run against a fake HTTP layer (`Http::fake()`), so the test suite never hits the real Regolo API and is safe to run in CI on every PR. No API key needed; no network needed; no money spent.
 
 ```bash
 composer install
 vendor/bin/phpunit
-# OK (61 tests, 123 assertions)
+# OK (81 tests, 168 assertions)
 ```
 
 Coverage breakdown:
 
-| Suite                            | Tests | Description                                                          |
-|----------------------------------|:-----:|----------------------------------------------------------------------|
-| `RegoloGatewayChatTest`          |   18  | 4 ported from Regolo Python SDK + 14 robustness (streaming, errors)  |
-| `RegoloGatewayEmbeddingsTest`    |   13  | 1 ported + 12 robustness (empty / batch / Unicode / 4xx / 429 / 503) |
-| `RegoloGatewayRerankTest`        |   15  | 1 ported + 14 robustness (top_n / score-ordering / index integrity)  |
-| `ServiceProviderTest`            |    6  | container binding + capability interfaces + gateway compositional    |
+| Suite                              | Tests | Description                                                          |
+|------------------------------------|:-----:|----------------------------------------------------------------------|
+| `RegoloGatewayChatTest`            |   21  | 4 ported from Regolo Python SDK + 17 robustness (streaming, errors)  |
+| `RegoloGatewayEmbeddingsTest`      |   12  | 1 ported + 11 robustness (empty / batch / Unicode / 4xx / 429 / 503) |
+| `RegoloGatewayRerankTest`          |   13  | 1 ported + 12 robustness (top_n / score-ordering / index integrity)  |
+| `RegoloGatewayImageTest`           |    8  | `images/generations` happy + size/quality + edit-rejection + timeout const + provider-config precedence |
+| `RegoloGatewayAudioTest`           |    6  | `audio/speech` (TTS) happy + voice/instructions forwarding + empty-body resilience |
+| `RegoloGatewayTranscriptionTest`   |    6  | `audio/transcriptions` (STT) happy + diarize + Whisper usage mapping |
+| `RegoloGatewayTimeoutFallbackTest` |    8  | provider-level timeout fallback (numeric / empty / non-numeric / negative) |
+| `ServiceProviderTest`              |    7  | container binding + capability interfaces + gateway compositional    |
 
 The test inventory and the rationale for each robustness scenario is documented in [`docs/test-coverage-vs-python-sdk.md`](docs/test-coverage-vs-python-sdk.md).
 
@@ -520,7 +530,7 @@ Open an issue or PR if you want a `workflow_dispatch` job added to this repo to 
 | Version | Status   | Highlights                                                                                                  |
 |---------|----------|-------------------------------------------------------------------------------------------------------------|
 | v0.1    | shipped  | Chat + streaming + embeddings + reranking + 61 tests + 6-cell CI matrix + WOW README + opt-in Live testsuite + AI vibe-coding pack. **First public release.** |
-| v0.2    | planned  | Image generation (`Image::of(...)->generate('regolo', ...)`) + audio transcription. Ports the Python SDK image / audio scenarios. |
+| v0.2    | shipped  | Multimodal: image generation (`Image::of(...)->generate('regolo', ...)` against `/v1/images/generations`, default `Qwen-Image`), audio transcription (`Transcription::of($audio)->using('regolo', ...)->generate()` against `/v1/audio/transcriptions`, default `faster-whisper-large-v3`), text-to-speech (`Audio::for($text)->generate('regolo', ...)` against `/v1/audio/speech`). 81 tests / 168 assertions. |
 | v0.3    | planned  | Provider-tools registry (Regolo-hosted web search / code interpreter, when published).                       |
 | v0.4    | exploring | Adaptive routing helper — pick `cheapest` vs `smartest` model per prompt with a small classifier.            |
 | v1.0    | tracking | Stable contract pinned against `laravel/ai` ^1.0 GA.                                                         |
