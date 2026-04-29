@@ -31,11 +31,26 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
  *
  * ## Optional overrides
  *
- *   REGOLO_BASE_URL                  default: https://api.regolo.ai/v1
- *   REGOLO_LIVE_TEXT_MODEL           default: Llama-3.1-8B-Instruct
- *   REGOLO_LIVE_EMBEDDINGS_MODEL     default: Qwen3-Embedding-8B
- *   REGOLO_LIVE_RERANKING_MODEL      default: jina-reranker-v2
- *   REGOLO_LIVE_TIMEOUT              default: 60
+ *   REGOLO_BASE_URL                       default: https://api.regolo.ai/v1
+ *   REGOLO_LIVE_TEXT_MODEL                default: Llama-3.1-8B-Instruct
+ *   REGOLO_LIVE_EMBEDDINGS_MODEL          default: Qwen3-Embedding-8B
+ *   REGOLO_LIVE_RERANKING_MODEL           default: jina-reranker-v2
+ *   REGOLO_LIVE_IMAGE_MODEL               default: Qwen-Image
+ *   REGOLO_LIVE_TRANSCRIPTION_MODEL       default: faster-whisper-large-v3
+ *   REGOLO_LIVE_TIMEOUT                   default: 60
+ *
+ * Multimodal — the corresponding live test self-skips when these
+ * are unset:
+ *
+ *   REGOLO_LIVE_AUDIO_MODEL               TTS model id from Seeweb
+ *                                         (catalogue not on /v1/models)
+ *   REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH  path to a real speech file
+ *
+ * Multimodal — optional overrides (defaults apply when unset):
+ *
+ *   REGOLO_LIVE_AUDIO_VOICE               default: alloy
+ *   REGOLO_LIVE_TRANSCRIPTION_LANGUAGE    optional ISO 639-1 hint
+ *                                         (omit to let Whisper auto-detect)
  *
  * Embedding vector dimension is **model-defined** — the live tests do
  * not attempt to override it. `RegoloGateway::generateEmbeddings()`
@@ -183,5 +198,54 @@ abstract class LiveTestCase extends TestCase
     protected function rerankingModel(): string
     {
         return $this->envValue('REGOLO_LIVE_RERANKING_MODEL') ?? 'jina-reranker-v2';
+    }
+
+    protected function imageModel(): string
+    {
+        return $this->envValue('REGOLO_LIVE_IMAGE_MODEL') ?? 'Qwen-Image';
+    }
+
+    protected function transcriptionModel(): string
+    {
+        return $this->envValue('REGOLO_LIVE_TRANSCRIPTION_MODEL') ?? 'faster-whisper-large-v3';
+    }
+
+    /**
+     * TTS model for the live audio test.
+     *
+     * Regolo's TTS catalogue is not on `GET /v1/models` yet — Seeweb
+     * provides the model id through their commercial / early-access
+     * channel rather than the public listing. The live audio test
+     * therefore self-skips when this env var is unset, matching the
+     * package-level pattern (`RegoloProvider::defaultAudioModel()`
+     * returns `''`). Once Seeweb publishes the catalogue, the env
+     * var becomes optional and a sensible default can be wired here.
+     */
+    protected function audioModelOrSkip(): string
+    {
+        $configured = $this->envValue('REGOLO_LIVE_AUDIO_MODEL');
+
+        if ($configured === null || $configured === '') {
+            $this->markTestSkipped(
+                'Live TTS test requires REGOLO_LIVE_AUDIO_MODEL — Regolo\'s TTS '.
+                'catalogue is not on /v1/models yet, the model id has to come '.
+                'from Seeweb directly. Set the env var to the model name they '.
+                'gave you to enable this scenario.'
+            );
+        }
+
+        return $configured;
+    }
+
+    /**
+     * Voice id for the TTS test, defaulting to OpenAI's `alloy` because
+     * Regolo's Audio gateway forwards the voice string verbatim and
+     * accepts the OpenAI-canonical names. The env var override exists
+     * for users whose Seeweb-provided model ships a different voice
+     * catalogue.
+     */
+    protected function audioVoice(): string
+    {
+        return $this->envValue('REGOLO_LIVE_AUDIO_VOICE') ?? 'alloy';
     }
 }

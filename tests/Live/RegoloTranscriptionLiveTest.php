@@ -1,0 +1,169 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Padosoft\LaravelAiRegolo\Tests\Live;
+
+use Laravel\Ai\Files\Base64Audio;
+use Laravel\Ai\Responses\TranscriptionResponse;
+
+/**
+ * Live audio-transcription test against `POST /v1/audio/transcriptions`
+ * on `api.regolo.ai`.
+ *
+ * Self-skips when `REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH` is unset
+ * because the test needs a real speech recording to assert anything
+ * meaningful — Whisper-style models will produce empty / nonsense
+ * output on synthetic silence or sine waves, and shipping a
+ * pre-recorded fixture would bloat the package distribution. Point
+ * the env var at any short MP3 / WAV / OGG / FLAC / M4A / WebM /
+ * MP4 clip the operator has on disk — even a single phrase recorded
+ * on a phone works. Generate one quickly with:
+ *
+ *     ffmpeg -f lavfi -t 5 -i "sine=frequency=440" /tmp/silence.mp3   # WON'T transcribe
+ *     # or, on macOS:
+ *     say -o /tmp/sample.aiff "this is a regolo live test" && \
+ *         ffmpeg -i /tmp/sample.aiff /tmp/sample.mp3
+ *     # or, on Linux with espeak-ng:
+ *     espeak-ng -w /tmp/sample.wav "this is a regolo live test"
+ *
+ * Synthetic silence / sine waves transcribe to empty `text` so use
+ * a real speech sample. The first recipe (sine wave) is included
+ * only as an explicit counter-example — use the `say` (macOS) or
+ * `espeak-ng` (Linux) recipes, which produce a usable speech
+ * recording the model can actually transcribe.
+ *
+ * Recommended fixture: 5-15 seconds of clearly enunciated Italian or
+ * English speech, ≤ 1 MB. Whisper handles longer clips but the test
+ * runs in a constrained CI-style 60s default timeout.
+ *
+ * Verifies the wire contract: the configured transcription model
+ * returns a non-empty `text` payload, the response is mapped onto
+ * `Laravel\Ai\Responses\TranscriptionResponse`, and the `meta` block
+ * carries the canonical provider / model values.
+ */
+final class RegoloTranscriptionLiveTest extends LiveTestCase
+{
+    public function test_live_transcription_returns_non_empty_text(): void
+    {
+        $audioPath = $this->envValue('REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH');
+
+        if ($audioPath === null || $audioPath === '') {
+            $this->markTestSkipped(
+                'Live transcription test requires REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH '.
+                'pointing at a real speech audio file (mp3 / wav / ogg / flac / m4a / webm / mp4). '.
+                'Whisper-style models produce empty / nonsense output on synthetic '.
+                'audio, so a real recording is the only way to validate the wire '.
+                'contract end-to-end.'
+            );
+        }
+
+        if (! is_file($audioPath) || ! is_readable($audioPath)) {
+            $this->markTestSkipped(sprintf(
+                'REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH is set to "%s" but the file '.
+                'does not exist or is not readable. Adjust the env var to a real '.
+                'audio file path.',
+                $audioPath,
+            ));
+        }
+
+        $bytes = file_get_contents($audioPath);
+        $this->assertNotFalse($bytes, 'Failed to read the audio fixture at '.$audioPath);
+
+        $audio = new Base64Audio(
+            base64_encode($bytes),
+            $this->detectAudioMimeType($audioPath),
+        );
+
+        $response = $this->liveGateway()->generateTranscription(
+            $this->liveProvider(),
+            $this->transcriptionModel(),
+            $audio,
+            language: $this->envValue('REGOLO_LIVE_TRANSCRIPTION_LANGUAGE'),
+            diarize: false,
+            timeout: $this->liveTimeout(),
+        );
+
+        $this->assertInstanceOf(TranscriptionResponse::class, $response);
+        $this->assertNotEmpty(
+            trim($response->text),
+            'Live transcription response must carry non-empty `text`. '.
+            'If the test fails here on a known-good audio file, verify '.
+            'the model can decode the file format (Whisper supports '.
+            'mp3 / wav / ogg / flac / m4a / webm / mp4).',
+        );
+
+        $this->assertSame('regolo', $response->meta->provider);
+        $this->assertSame($this->transcriptionModel(), $response->meta->model);
+    }
+
+    /**
+     * MIME detection for the audio fixture, in two layers:
+     *
+     *   1. Trust the file extension when it matches one of the
+     *      Whisper-supported formats — that is the canonical
+     *      mapping the upstream documents and the gateway's
+     *      multipart filename heuristic uses the same mapping in
+     *      reverse, so the two stay in sync.
+     *   2. Fall back to PHP's `finfo_file()` for any other extension
+     *      so a user who points at, say, a recording without a
+     *      file extension still gets a correct `Content-Type`.
+     *   3. If both miss, mark the test skipped with a clear message
+     *      rather than uploading the bytes mislabeled as `audio/mpeg`
+     *      (which would surface as a confusing upstream 415 / 422).
+     */
+    private function detectAudioMimeType(string $path): string
+    {
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        $extensionMap = [
+            'mp3' => 'audio/mpeg',
+            'wav' => 'audio/wav',
+            'ogg' => 'audio/ogg',
+            'flac' => 'audio/flac',
+            'm4a' => 'audio/m4a',
+            'webm' => 'audio/webm',
+            'mp4' => 'audio/mp4',
+        ];
+
+        if (isset($extensionMap[$extension])) {
+            return $extensionMap[$extension];
+        }
+
+        if (function_exists('finfo_open')) {
+            $finfo = finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo !== false) {
+                $detected = finfo_file($finfo, $path);
+                finfo_close($finfo);
+
+                // Accept `audio/*` (the obvious case) AND
+                // `video/mp4` / `video/webm` — both are MPEG / WebM
+                // containers that frequently carry an audio-only
+                // stream. `finfo_file()` reports the container type
+                // (`video/...`) even when the payload is pure audio,
+                // so an `audio/*` strict gate would force the
+                // markTestSkipped branch on the very files we
+                // explicitly mapped via the extension table above.
+                // Whisper accepts the underlying audio stream
+                // regardless of how the container labels itself.
+                if (is_string($detected) && (
+                    str_starts_with($detected, 'audio/')
+                    || $detected === 'video/mp4'
+                    || $detected === 'video/webm'
+                )) {
+                    return $detected;
+                }
+            }
+        }
+
+        $this->markTestSkipped(sprintf(
+            'Could not determine an audio MIME type for "%s" — extension "%s" '.
+            'is not in the supported list (mp3 / wav / ogg / flac / m4a / '.
+            'webm / mp4) and `finfo_file()` did not return an `audio/*` value. '.
+            'Point REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH at a recognised audio '.
+            'file format to enable this scenario.',
+            $path,
+            $extension !== '' ? $extension : '(none)',
+        ));
+    }
+}
