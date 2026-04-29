@@ -16,9 +16,9 @@ use Laravel\Ai\Responses\TranscriptionResponse;
  * meaningful — Whisper-style models will produce empty / nonsense
  * output on synthetic silence or sine waves, and shipping a
  * pre-recorded fixture would bloat the package distribution. Point
- * the env var at any short MP3 / WAV / OGG / FLAC / M4A clip the
- * operator has on disk — even a single phrase recorded on a phone
- * works. Generate one quickly with:
+ * the env var at any short MP3 / WAV / OGG / FLAC / M4A / WebM /
+ * MP4 clip the operator has on disk — even a single phrase recorded
+ * on a phone works. Generate one quickly with:
  *
  *     ffmpeg -f lavfi -t 5 -i "sine=frequency=440" /tmp/silence.mp3   # WON'T transcribe
  *     # or, on macOS:
@@ -51,7 +51,7 @@ final class RegoloTranscriptionLiveTest extends LiveTestCase
         if ($audioPath === null || $audioPath === '') {
             $this->markTestSkipped(
                 'Live transcription test requires REGOLO_LIVE_TRANSCRIPTION_AUDIO_PATH '.
-                'pointing at a real speech audio file (mp3 / wav / ogg / flac / m4a). '.
+                'pointing at a real speech audio file (mp3 / wav / ogg / flac / m4a / webm / mp4). '.
                 'Whisper-style models produce empty / nonsense output on synthetic '.
                 'audio, so a real recording is the only way to validate the wire '.
                 'contract end-to-end.'
@@ -90,7 +90,7 @@ final class RegoloTranscriptionLiveTest extends LiveTestCase
             'Live transcription response must carry non-empty `text`. '.
             'If the test fails here on a known-good audio file, verify '.
             'the model can decode the file format (Whisper supports '.
-            'mp3 / wav / ogg / flac / m4a / webm).',
+            'mp3 / wav / ogg / flac / m4a / webm / mp4).',
         );
 
         $this->assertSame('regolo', $response->meta->provider);
