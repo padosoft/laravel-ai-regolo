@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Padosoft\LaravelAiRegolo\Tests\Unit;
 
 use Illuminate\Foundation\Application;
+use Laravel\Ai\Ai;
+use Laravel\Ai\AiServiceProvider;
 use Laravel\Ai\Contracts\Gateway\EmbeddingGateway;
 use Laravel\Ai\Contracts\Gateway\RerankingGateway;
 use Laravel\Ai\Contracts\Gateway\TextGateway;
@@ -18,14 +20,15 @@ use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
 
 /**
  * Verifies the package wiring: service provider boots, the
- * `ai.provider.regolo` container binding resolves a configured
- * `RegoloProvider`, and the gateway exposes all three SDK capability
+ * `Ai::instance('regolo')` resolution returns a configured
+ * `RegoloProvider` (registered via `Ai::extend()` in the package
+ * service provider), and the gateway exposes all three SDK capability
  * interfaces (text + embeddings + reranking) without trait conflicts.
  *
- * R23 — pluggable pipeline-style: the binding name is part of our
- * contract with the upstream `laravel/ai` SDK, so a regression that
- * silently renames it would break every consumer's resolve path. This
- * test pins both the binding key and the resolved class.
+ * R23 — pluggable pipeline-style: the driver name `regolo` is part of
+ * our contract with the upstream `laravel/ai` SDK, so a regression
+ * that silently renames it would break every consumer's resolve path.
+ * This test pins both the driver name and the resolved class.
  */
 final class ServiceProviderTest extends TestCase
 {
@@ -37,16 +40,16 @@ final class ServiceProviderTest extends TestCase
         $this->assertTrue($providers[LaravelAiRegoloServiceProvider::class]);
     }
 
-    public function test_ai_provider_regolo_binding_resolves_to_regolo_provider(): void
+    public function test_ai_driver_regolo_resolves_to_regolo_provider(): void
     {
-        $resolved = $this->app->make('ai.provider.regolo');
+        $resolved = Ai::instance('regolo');
 
         $this->assertInstanceOf(RegoloProvider::class, $resolved);
     }
 
     public function test_regolo_provider_implements_three_capability_interfaces(): void
     {
-        $provider = $this->app->make('ai.provider.regolo');
+        $provider = Ai::instance('regolo');
 
         $this->assertInstanceOf(TextProvider::class, $provider);
         $this->assertInstanceOf(EmbeddingProvider::class, $provider);
@@ -56,7 +59,7 @@ final class ServiceProviderTest extends TestCase
     public function test_regolo_provider_exposes_unified_gateway_for_three_capabilities(): void
     {
         /** @var RegoloProvider $provider */
-        $provider = $this->app->make('ai.provider.regolo');
+        $provider = Ai::instance('regolo');
 
         $textGateway = $provider->textGateway();
         $embeddingGateway = $provider->embeddingGateway();
@@ -77,7 +80,7 @@ final class ServiceProviderTest extends TestCase
     public function test_regolo_provider_credentials_flow_through_to_provider_credentials(): void
     {
         /** @var RegoloProvider $provider */
-        $provider = $this->app->make('ai.provider.regolo');
+        $provider = Ai::instance('regolo');
 
         $this->assertSame('test-api-key', $provider->providerCredentials()['key']);
     }
@@ -85,7 +88,7 @@ final class ServiceProviderTest extends TestCase
     public function test_regolo_provider_additional_configuration_includes_base_url(): void
     {
         /** @var RegoloProvider $provider */
-        $provider = $this->app->make('ai.provider.regolo');
+        $provider = Ai::instance('regolo');
 
         $this->assertSame(
             'https://api.regolo.test/v1',
@@ -93,12 +96,32 @@ final class ServiceProviderTest extends TestCase
         );
     }
 
+    public function test_regolo_provider_resolves_with_default_models_when_unspecified(): void
+    {
+        /** @var RegoloProvider $provider */
+        $provider = Ai::instance('regolo');
+
+        // The package defaults — verified end-to-end through the SDK
+        // resolution path so any future config-shape change is caught.
+        $this->assertSame('Llama-3.1-8B-Instruct', $provider->defaultTextModel());
+        $this->assertSame('Qwen3-Embedding-8B', $provider->defaultEmbeddingsModel());
+        $this->assertSame('jina-reranker-v2', $provider->defaultRerankingModel());
+    }
+
     /**
      * @return array<int, class-string>
      */
     protected function getPackageProviders($app): array
     {
-        return [LaravelAiRegoloServiceProvider::class];
+        // Upstream `laravel/ai` SDK must be registered too — Testbench
+        // does not auto-discover packages, so listing only this package's
+        // service provider would leave the `Ai` facade pointing at an
+        // unbound `AiManager` (whose constructor takes `$app` and cannot
+        // be resolved by the container without the SDK provider).
+        return [
+            AiServiceProvider::class,
+            LaravelAiRegoloServiceProvider::class,
+        ];
     }
 
     /**
