@@ -15,6 +15,10 @@
   <a href="https://github.com/padosoft/laravel-ai-regolo/issues"><img alt="GitHub issues" src="https://img.shields.io/github/issues/padosoft/laravel-ai-regolo"></a>
 </p>
 
+<p align="center">
+  <img alt="laravel-ai-regolo — Italian sovereign AI for Laravel" src="resources/banner.png">
+</p>
+
 ---
 
 ## Table of contents
