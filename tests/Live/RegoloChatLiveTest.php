@@ -30,7 +30,39 @@ final class RegoloChatLiveTest extends LiveTestCase
         $this->assertInstanceOf(TextResponse::class, $response);
         $this->assertNotEmpty($response->text, 'Live chat should return a non-empty answer.');
         $this->assertSame('regolo', $response->meta->provider);
-        $this->assertSame($this->textModel(), $response->meta->model);
+
+        // Regolo's API canonicalises the model name in the response —
+        // a request for `Llama-3.1-8B-Instruct` (HuggingFace shape)
+        // comes back as `llama3.1:8b` (Ollama tag shape). Both refer
+        // to the same weights, but a strict `assertSame()` against
+        // the requested name flakes on this server-side normalisation.
+        // Match on the leading alphabetic family token derived from
+        // the *requested* model (`Llama-3.1-8B-Instruct` → `Llama`,
+        // `Qwen3-Coder-30B` → `Qwen`, `Mistral-7B-Instruct` →
+        // `Mistral`), so the suite stays correct when an operator
+        // points `REGOLO_LIVE_TEXT_MODEL` at any other catalogue
+        // entry — Copilot review on PR #11 round-2 flagged the prior
+        // hard-coded `'llama'` for exactly that reason. A future
+        // regression that mis-routes the request to a different
+        // family still fails this assertion loudly.
+        $family = preg_match('/^([A-Za-z]+)/', $this->textModel(), $matches) === 1
+            ? $matches[1]
+            : $this->textModel();
+
+        $this->assertStringContainsStringIgnoringCase(
+            $family,
+            $response->meta->model,
+            sprintf(
+                'Expected the response model to mention the family `%s` derived '.
+                'from the requested model `%s` — Regolo canonicalises tags '.
+                '(e.g. `Llama-3.1-8B-Instruct` → `llama3.1:8b`) but the family '.
+                'prefix survives the canonicalisation. Got: %s',
+                $family,
+                $this->textModel(),
+                $response->meta->model,
+            ),
+        );
+
         $this->assertGreaterThan(0, $response->usage->promptTokens, 'Live response should report prompt tokens.');
         $this->assertGreaterThan(0, $response->usage->completionTokens, 'Live response should report completion tokens.');
     }

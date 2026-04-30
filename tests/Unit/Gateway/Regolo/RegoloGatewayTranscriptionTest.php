@@ -163,7 +163,7 @@ final class RegoloGatewayTranscriptionTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 // transcription entry intentionally absent
             ],
         ]);
@@ -177,7 +177,7 @@ final class RegoloGatewayTranscriptionTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 'transcription' => ['default' => 'whisper-large-v3-italian'],
             ],
         ]);
@@ -282,7 +282,7 @@ final class RegoloGatewayTranscriptionTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 'transcription' => ['default' => 'faster-whisper-large-v3'],
             ],
         ], $configOverride);

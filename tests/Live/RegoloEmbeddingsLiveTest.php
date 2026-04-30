@@ -58,7 +58,7 @@ final class RegoloEmbeddingsLiveTest extends LiveTestCase
         $inputs = [
             'Italian sovereign cloud.',
             'OpenAI-compatible chat completions.',
-            'Vector reranking against jina-reranker-v2.',
+            'Vector reranking against Qwen3-Reranker-4B.',
         ];
 
         $response = $this->liveGateway()->generateEmbeddings(

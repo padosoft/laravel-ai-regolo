@@ -55,7 +55,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $response = $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             $documents,
             'Quale città è la capitale italiana?',
         );
@@ -70,7 +70,7 @@ final class RegoloGatewayRerankTest extends TestCase
             $body = $request->data();
 
             return str_ends_with($request->url(), '/rerank')
-                && $body['model'] === 'jina-reranker-v2'
+                && $body['model'] === 'Qwen3-Reranker-4B'
                 && $body['query'] === 'Quale città è la capitale italiana?'
                 && $body['documents'] === $documents
                 && ! array_key_exists('top_n', $body);
@@ -89,7 +89,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $response = $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             [],
             'any query',
         );
@@ -110,7 +110,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $response = $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             ['only one'],
             'something',
         );
@@ -135,7 +135,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $response = $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             $documents,
             'q',
             limit: 3,
@@ -162,7 +162,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             ['a', 'b'],
             'q',
             limit: 0,
@@ -188,7 +188,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $response = $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             $documents,
             'q',
             limit: 99,
@@ -231,7 +231,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $response = $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             $documents,
             'q',
         );
@@ -259,7 +259,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $response = $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             $documents,
             'q',
         );
@@ -285,7 +285,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             ['fail'],
             'q',
         );
@@ -331,7 +331,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             ['rate'],
             'q',
         );
@@ -352,7 +352,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $gateway->rerank(
             $this->makeProvider(),
-            'jina-reranker-v2',
+            'Qwen3-Reranker-4B',
             ['busy'],
             'q',
         );
@@ -379,7 +379,7 @@ final class RegoloGatewayRerankTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
             ],
         ], $configOverride);
 
@@ -392,7 +392,7 @@ final class RegoloGatewayRerankTest extends TestCase
      * @param  array<array{index:int, score:float}>  $rankings  results in the wire order the Regolo API would return
      * @param  string  $model  echoed model identifier
      */
-    private function rerankFixture(array $rankings, string $model = 'jina-reranker-v2'): array
+    private function rerankFixture(array $rankings, string $model = 'Qwen3-Reranker-4B'): array
     {
         return [
             'id' => 'rerank-test',

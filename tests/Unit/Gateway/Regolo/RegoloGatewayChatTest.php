@@ -616,7 +616,7 @@ final class RegoloGatewayChatTest extends TestCase
                     'smartest' => 'Llama-3.3-70B-Instruct',
                 ],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
             ],
         ], $configOverride);
 

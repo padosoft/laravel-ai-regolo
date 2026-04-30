@@ -59,7 +59,7 @@ use Padosoft\LaravelAiRegolo\Gateway\Regolo\RegoloGateway;
  *
  *  - default text:           Llama-3.1-8B-Instruct
  *  - default embeddings:     Qwen3-Embedding-8B
- *  - default reranking:      jina-reranker-v2
+ *  - default reranking:      Qwen3-Reranker-4B
  *  - default image:          Qwen-Image
  *  - default transcription:  faster-whisper-large-v3
  *  - default audio (TTS):    NOT pinned — Regolo's TTS catalogue is not
@@ -159,7 +159,7 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
 
     public function defaultRerankingModel(): string
     {
-        return $this->config['models']['reranking']['default'] ?? 'jina-reranker-v2';
+        return $this->config['models']['reranking']['default'] ?? 'Qwen3-Reranker-4B';
     }
 
     public function defaultImageModel(): string

@@ -12,6 +12,7 @@ use Orchestra\Testbench\TestCase;
 use Padosoft\LaravelAiRegolo\Gateway\Regolo\RegoloGateway;
 use Padosoft\LaravelAiRegolo\LaravelAiRegoloServiceProvider;
 use Padosoft\LaravelAiRegolo\Providers\RegoloProvider;
+use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
 
 /**
@@ -173,12 +174,103 @@ final class RegoloGatewayImageTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 'image' => ['default' => 'Qwen-Image-Heavy'],
             ],
         ]);
 
         $this->assertSame('Qwen-Image-Heavy', $provider->defaultImageModel());
+    }
+
+    /**
+     * Exercise each branch of the gateway's MIME byte-signature
+     * sniffer end-to-end through `generateImage()`. The Live suite
+     * already covers the JPEG branch (Qwen-Image returns JPEG
+     * today), but a regression in the PNG / WebP / GIF87a / GIF89a
+     * branches would have shipped silently — none of the existing
+     * unit fixtures pass valid base64, so they all fall back to
+     * `image/png` regardless of which branch fires. Copilot caught
+     * this gap on the v0.2.2 review (PR #11 round-5).
+     *
+     * For each fixture the magic-byte prefix is the canonical file
+     * signature for that format, padded out with arbitrary trailing
+     * bytes so the decoded payload exceeds the longest signature
+     * length the sniffer inspects (12 bytes for WebP). The padding
+     * bytes are deliberately not a second magic prefix so a
+     * sniffer regression that, say, classifies WebP-after-PNG as
+     * WebP fails this test.
+     *
+     * @return iterable<string, array{0: string, 1: string}>
+     */
+    public static function imageSignatureFixtures(): iterable
+    {
+        // Each fixture is `[expectedMime, rawBytes]`. The test
+        // base64-encodes `rawBytes` to feed the gateway via
+        // Http::fake; the gateway then decodes only the first ~12
+        // raw bytes via its 24-char prefix-decode optimisation.
+        yield 'png' => ['image/png', "\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"];
+        yield 'jpeg-jfif' => ['image/jpeg', "\xFF\xD8\xFF\xE0\x00\x10JFIF\x00\x01"];
+        yield 'jpeg-exif' => ['image/jpeg', "\xFF\xD8\xFF\xE1\x00\x10Exif\x00\x00"];
+        yield 'webp' => ['image/webp', 'RIFF'."\x24\x00\x00\x00".'WEBPVP8 '];
+        yield 'gif87a' => ['image/gif', 'GIF87a'."\x10\x00\x10\x00\x00\x00"];
+        yield 'gif89a' => ['image/gif', 'GIF89a'."\x10\x00\x10\x00\x00\x00"];
+    }
+
+    #[DataProvider('imageSignatureFixtures')]
+    public function test_generate_image_classifies_each_recognised_signature(string $expectedMime, string $rawBytes): void
+    {
+        $b64 = base64_encode($rawBytes);
+
+        Http::fake([
+            'api.regolo.test/v1/images/generations' => Http::response($this->imageFixture([$b64])),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $response = $gateway->generateImage(
+            $this->makeProvider(),
+            'Qwen-Image',
+            'A photorealistic aurora over Alpine peaks.',
+        );
+
+        $this->assertSame(
+            $expectedMime,
+            $response->images[0]->mime,
+            sprintf(
+                'Gateway must label the response with `%s` when the b64 '.
+                'payload decodes to bytes starting with the canonical '.
+                'magic prefix for that format. Got `%s`. Hex of decoded '.
+                'prefix: `%s`.',
+                $expectedMime,
+                $response->images[0]->mime,
+                bin2hex(substr($rawBytes, 0, 12)),
+            ),
+        );
+    }
+
+    public function test_generate_image_classifies_unrecognised_signature_as_png_fallback(): void
+    {
+        // A valid base64 payload whose decoded bytes match NO known
+        // image magic prefix must fall back to `image/png` — the
+        // long-standing OpenAI default and the contract every
+        // existing consumer of the gateway relies on. Use 24 bytes
+        // of `\x00` so the prefix-decoder (24-char window) always
+        // produces 18 raw bytes the sniffer can inspect.
+        $b64 = base64_encode(str_repeat("\x00", 24));
+
+        Http::fake([
+            'api.regolo.test/v1/images/generations' => Http::response($this->imageFixture([$b64])),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $response = $gateway->generateImage(
+            $this->makeProvider(),
+            'Qwen-Image',
+            'An abstract pattern of midnight stars.',
+        );
+
+        $this->assertSame('image/png', $response->images[0]->mime);
     }
 
     public function test_generate_image_default_model_when_config_missing(): void
@@ -187,7 +279,7 @@ final class RegoloGatewayImageTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 // image entry intentionally absent
             ],
         ]);
@@ -240,7 +332,7 @@ final class RegoloGatewayImageTest extends TestCase
             'models' => [
                 'text' => ['default' => 'Llama-3.1-8B-Instruct'],
                 'embeddings' => ['default' => 'Qwen3-Embedding-8B', 'dimensions' => 4096],
-                'reranking' => ['default' => 'jina-reranker-v2'],
+                'reranking' => ['default' => 'Qwen3-Reranker-4B'],
                 'image' => ['default' => 'Qwen-Image'],
             ],
         ], $configOverride);

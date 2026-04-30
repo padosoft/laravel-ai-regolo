@@ -320,7 +320,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         return new ImageResponse(
             (new Collection($data['data'] ?? []))->map(fn (array $image) => new GeneratedImage(
                 $image['b64_json'] ?? '',
-                'image/png',
+                $this->detectImageMime($image['b64_json'] ?? ''),
             )),
             new Usage(0, 0),
             new Meta($provider->name(), $model),
@@ -483,6 +483,92 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         };
 
         return "audio.{$extension}";
+    }
+
+    /**
+     * Inspect the first few bytes of a base64-encoded image payload to
+     * label the response with the actual format. Regolo's `Qwen-Image`
+     * empirically returns JPEG today — using the JFIF APP0 marker
+     * (`\xFF\xD8\xFF\xE0`) — even though the SDK's OpenAI-compatible
+     * response envelope has no `mime` field; without sniffing the
+     * bytes we'd hand `image/png` downstream and the `<img>` tag
+     * emitter / file-store helpers would write `.png` files
+     * containing JPEG bytes. The sniffer accepts ANY JPEG variant,
+     * not just JFIF — the JPEG check below matches the 3-byte
+     * `\xFF\xD8\xFF` SOI prefix that's common to every APP marker
+     * family (JFIF/E0, EXIF/E1, ICC/E2, ...), so a future Regolo
+     * release that swaps the marker family still resolves correctly.
+     *
+     * Recognised signatures (only the first ~12 raw bytes need
+     * decoding — see the prefix-only optimisation in the body):
+     *   - PNG:  `\x89PNG\r\n\x1a\n`        (8 bytes, canonical)
+     *   - JPEG: `\xFF\xD8\xFF` + any APPn   (3 bytes; matches JFIF /
+     *                                       EXIF / Adobe / etc.)
+     *   - WebP: `RIFF` + 4 size bytes + `WEBP` (12 bytes total — the
+     *                                       `WEBP` marker at offset
+     *                                       8 disambiguates the
+     *                                       container from WAV/AVI)
+     *   - GIF:  `GIF87a` / `GIF89a`        (6 bytes)
+     *
+     * Falls back to `image/png` for unrecognised payloads — that
+     * matches the long-standing OpenAI default and keeps existing
+     * unit-test fixtures (which pass deliberate non-image payloads
+     * like `'fake-png-1'`) green.
+     */
+    private function detectImageMime(string $base64): string
+    {
+        if ($base64 === '') {
+            return 'image/png';
+        }
+
+        // Decode only a short base64 prefix instead of the entire
+        // payload — Qwen-Image renders are routinely several MB and
+        // the sniffer never needs more than the first 12 raw bytes
+        // (the longest signature segment is WebP's
+        // `RIFF....WEBP` ending at offset 11). 16 base64 characters
+        // decode to exactly 12 raw bytes under strict mode (4 chars
+        // → 3 bytes); take 24 chars to absorb future signature
+        // additions without re-tuning the constant. Copilot review
+        // on PR #11 round-3 flagged the prior "decode the whole
+        // payload" branch as avoidable CPU+RAM overhead.
+        //
+        // strict: true so a non-base64 payload (e.g. the unit-test
+        // fixtures `'fake-png-1'`) decodes to `false` and reliably
+        // hits the `image/png` fallback below. With strict: false,
+        // PHP would best-effort-decode the garbage into arbitrary
+        // bytes that could accidentally match one of the magic
+        // prefixes downstream and surface a wrong MIME — Copilot
+        // also caught this in round-1.
+        $bytes = base64_decode(substr($base64, 0, 24), strict: true);
+        if ($bytes === false) {
+            return 'image/png';
+        }
+
+        // No global "< 8 bytes" early-exit: each format's prefix
+        // check below is self-bounded by `str_starts_with` (false on
+        // short input) and the per-format magic length varies — JPEG
+        // is only 3 bytes (`\xFF\xD8\xFF`), GIF is 6 (`GIF8?a`), PNG
+        // is 8, WebP is 12. A blanket `strlen < 8` would mislabel a
+        // valid-but-short JPEG/GIF payload as `image/png` (Copilot
+        // PR #11 round-4). The implicit per-format threshold lives
+        // in each `str_starts_with` call.
+        if (str_starts_with($bytes, "\x89PNG\r\n\x1a\n")) {
+            return 'image/png';
+        }
+
+        if (str_starts_with($bytes, "\xFF\xD8\xFF")) {
+            return 'image/jpeg';
+        }
+
+        if (str_starts_with($bytes, 'RIFF') && substr($bytes, 8, 4) === 'WEBP') {
+            return 'image/webp';
+        }
+
+        if (str_starts_with($bytes, 'GIF87a') || str_starts_with($bytes, 'GIF89a')) {
+            return 'image/gif';
+        }
+
+        return 'image/png';
     }
 
     /**
