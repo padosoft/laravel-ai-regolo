@@ -26,21 +26,22 @@
 1. [Why this package](#why-this-package)
 2. [Design rationale](#design-rationale)
 3. [Features at a glance](#features-at-a-glance)
-4. [Comparison vs alternatives](#comparison-vs-alternatives)
-5. [When to use Regolo vs OpenAI](#when-to-use-regolo-vs-openai)
-6. [Installation](#installation)
-7. [Quick start](#quick-start)
-8. [Usage examples](#usage-examples)
-9. [Configuration reference](#configuration-reference)
-10. [Architecture](#architecture)
-11. [🚀 AI vibe-coding pack included](#ai-vibe-coding-pack-included)
-12. [Testing](#testing)
+4. [See it in action — laravel-ai-chat demo](#see-it-in-action--laravel-ai-chat-demo)
+5. [Comparison vs alternatives](#comparison-vs-alternatives)
+6. [When to use Regolo vs OpenAI](#when-to-use-regolo-vs-openai)
+7. [Installation](#installation)
+8. [Quick start](#quick-start)
+9. [Usage examples](#usage-examples)
+10. [Configuration reference](#configuration-reference)
+11. [Architecture](#architecture)
+12. [🚀 AI vibe-coding pack included](#ai-vibe-coding-pack-included)
+13. [Testing](#testing)
     - [Default suite — offline](#default-suite--offline-zero-cost-runs-everywhere)
     - [Running the live test suite](#running-the-live-test-suite-against-the-real-regolo-api)
-13. [Roadmap](#roadmap)
-14. [Contributing](#contributing)
-15. [Security](#security)
-16. [License & credits](#license--credits)
+14. [Roadmap](#roadmap)
+15. [Contributing](#contributing)
+16. [Security](#security)
+17. [License & credits](#license--credits)
 
 ---
 
@@ -100,6 +101,22 @@ The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or an
 - **82 unit tests / 184 assertions** — every Python-SDK happy-path is ported, plus 60+ robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn / timeout-fallback misconfiguration / image-edit rejection / multipart-language omission / diarization toggling).
 - 🚀 **AI vibe-coding pack ships in the box** — every release includes the [Padosoft Claude pack](#ai-vibe-coding-pack-included) under `.claude/` (skills, rules, agents, slash-commands). The moment you `composer require` this package and open the project in Claude Code, the agent picks up Padosoft's house conventions automatically. **No other Laravel AI provider package ships this today.**
 - 🧪 **Opt-in live test suite** — point `REGOLO_API_KEY` at a real key and run `vendor/bin/phpunit --testsuite Live` to verify wire compatibility against `api.regolo.ai`. Default suite remains 100% offline. See [Running the live test suite](#running-the-live-test-suite-against-the-real-regolo-api).
+
+## See it in action — laravel-ai-chat demo
+
+Want to see this package powering a real ChatGPT-style chatbot? **[`padosoft/laravel-ai-chat`](https://github.com/padosoft/laravel-ai-chat)** is a runnable, MIT-licensed demo on Laravel 13 + React that drops this provider behind the [Vercel AI SDK UI](https://ai-sdk.dev) (`@ai-sdk/react`'s `useChat()` hook + `ai` v6 message-stream protocol). Five suggested prompts trigger five tools that render inline as image / document / link-list / code-snippet / data-table artifacts — token-by-token streaming end-to-end, no glue code on top of `laravel/ai` and this package.
+
+<p align="center">
+  <a href="https://github.com/padosoft/laravel-ai-chat">
+    <img alt="laravel-ai-chat — animated demo: streaming Regolo reply with image · doc · links · code · table artifacts rendering inline" src="resources/Laravel-AI-Chat-Demo.gif" width="900">
+  </a>
+</p>
+
+<p align="center">
+  <strong><a href="https://github.com/padosoft/laravel-ai-chat">▶ Open the demo on GitHub →</a></strong>
+</p>
+
+Clone it, paste your Regolo key, run three commands, and you have a working chat in five minutes — the cleanest way to verify this package end-to-end and the fastest starting point for your own AI product on top of it.
 
 ## Comparison vs alternatives
 
