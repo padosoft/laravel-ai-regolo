@@ -299,6 +299,50 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
     }
 
     /**
+     * v1.0.1 — laravel/ai v0.6.8 added a 6th `array $providerOptions = []`
+     * parameter to the EmbeddingGateway contract. The gateway merges those
+     * keys into the OpenAI-shaped request body before the framework-fixed
+     * `model` + `input` fields, so caller-provided fields (e.g. `user`,
+     * `encoding_format`) reach Regolo unchanged while `model` / `input`
+     * stay authoritative — the gateway calls
+     * `array_merge($providerOptions, ['model' => $model, 'input' => $inputs])`
+     * so any `model` / `input` keys inside `$providerOptions` are
+     * overwritten by the canonical values on key collision.
+     */
+    public function test_embed_provider_options_merge_into_request_body(): void
+    {
+        Http::fake([
+            'api.regolo.test/v1/embeddings' => Http::response($this->embeddingsFixture(1, dim: 4)),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $gateway->generateEmbeddings(
+            $this->makeProvider(),
+            'Qwen3-Embedding-8B',
+            ['hello'],
+            4096,
+            timeout: 30,
+            providerOptions: [
+                'user' => 'tenant-abc',
+                'encoding_format' => 'float',
+                // Caller cannot override the framework-fixed fields.
+                'model' => 'evil-attempt',
+                'input' => ['ignored'],
+            ],
+        );
+
+        Http::assertSent(function (Request $request) {
+            $body = $request->data();
+
+            return $body['model'] === 'Qwen3-Embedding-8B'
+                && $body['input'] === ['hello']
+                && $body['user'] === 'tenant-abc'
+                && $body['encoding_format'] === 'float';
+        });
+    }
+
+    /**
      * @return array<int, class-string>
      */
     protected function getPackageProviders($app): array

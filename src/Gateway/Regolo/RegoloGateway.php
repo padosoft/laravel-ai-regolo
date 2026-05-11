@@ -188,6 +188,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         array $inputs,
         int $dimensions,
         int $timeout = 30,
+        array $providerOptions = [],
     ): EmbeddingsResponse {
         if (empty($inputs)) {
             return new EmbeddingsResponse(
@@ -199,10 +200,10 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
 
         $response = $this->withErrorHandling(
             $provider->name(),
-            fn () => $this->client($provider, $timeout)->post('embeddings', [
+            fn () => $this->client($provider, $timeout)->post('embeddings', array_merge($providerOptions, [
                 'model' => $model,
                 'input' => $inputs,
-            ]),
+            ])),
         );
 
         $data = $response->json();
