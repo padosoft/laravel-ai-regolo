@@ -304,8 +304,10 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
      * keys into the OpenAI-shaped request body before the framework-fixed
      * `model` + `input` fields, so caller-provided fields (e.g. `user`,
      * `encoding_format`) reach Regolo unchanged while `model` / `input`
-     * stay authoritative — `array_merge($providerOptions, [model, input])`
-     * lets the canonical fields win on key collision.
+     * stay authoritative — the gateway calls
+     * `array_merge($providerOptions, ['model' => $model, 'input' => $inputs])`
+     * so any `model` / `input` keys inside `$providerOptions` are
+     * overwritten by the canonical values on key collision.
      */
     public function test_embed_provider_options_merge_into_request_body(): void
     {
