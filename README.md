@@ -21,6 +21,8 @@
 
 ---
 
+📚 Public docs: [doc.laravel-ai-regolo.padosoft.com](https://doc.laravel-ai-regolo.padosoft.com)
+
 ## Table of contents
 
 1. [Why this package](#why-this-package)
