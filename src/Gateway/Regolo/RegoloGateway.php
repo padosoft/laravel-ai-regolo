@@ -387,6 +387,15 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
      * `response_format=diarized_json`; not every Regolo Whisper variant
      * supports it — the upstream returns a plain `text` field if not, and
      * the response shape stays compatible.
+     *
+     * `$providerOptions` (added to the SDK's `TranscriptionGateway`
+     * contract in laravel/ai v0.7.0) is merged into the multipart body
+     * so callers can forward Regolo-specific knobs (e.g. `prompt`,
+     * `temperature`). Explicit `model` / `language` / `response_format`
+     * fields win over any same-named key in `$providerOptions`, mirroring
+     * the upstream OpenAiGateway merge order.
+     *
+     * @param  array<string, mixed>  $providerOptions
      */
     public function generateTranscription(
         TranscriptionProvider $provider,
@@ -395,16 +404,17 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         ?string $language = null,
         bool $diarize = false,
         int $timeout = 30,
+        array $providerOptions = [],
     ): TranscriptionResponse {
         $response = $this->withErrorHandling(
             $provider->name(),
             fn () => $this->client($provider, $timeout)
                 ->attach('file', $audio->content(), $this->audioFilename($audio), ['Content-Type' => $audio->mimeType()])
-                ->post('audio/transcriptions', array_filter([
+                ->post('audio/transcriptions', array_merge($providerOptions, array_filter([
                     'model' => $model,
                     'language' => $language,
                     'response_format' => $diarize ? 'diarized_json' : 'json',
-                ], fn ($v) => $v !== null)),
+                ], fn ($v) => $v !== null))),
         );
 
         $data = $response->json();

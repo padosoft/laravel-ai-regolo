@@ -157,6 +157,67 @@ final class RegoloGatewayTranscriptionTest extends TestCase
         });
     }
 
+    public function test_generate_transcription_forwards_provider_options(): void
+    {
+        // `$providerOptions` was added to the SDK's TranscriptionGateway
+        // contract in laravel/ai v0.7.0 (PR #31). The gateway merges it
+        // into the multipart body so Regolo-specific knobs (e.g.
+        // `prompt`, `temperature`) reach the wire.
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            language: 'it',
+            providerOptions: ['prompt' => 'Glossario Regolo', 'temperature' => '0'],
+        );
+
+        Http::assertSent(function (Request $request) {
+            return $this->multipartContains($request, 'name="prompt"', 'Glossario Regolo')
+                && $this->multipartContains($request, 'name="temperature"', '0')
+                && $this->multipartContains($request, 'name="language"', 'it');
+        });
+    }
+
+    public function test_generate_transcription_explicit_fields_win_over_provider_options(): void
+    {
+        // Explicit model / language / response_format must override any
+        // same-named key passed through `$providerOptions`, mirroring the
+        // upstream OpenAiGateway merge order
+        // (`array_merge($providerOptions, $explicit)`).
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            language: 'it',
+            providerOptions: ['model' => 'should-be-ignored', 'response_format' => 'srt'],
+        );
+
+        Http::assertSent(function (Request $request) {
+            $body = (string) $request->body();
+
+            return $this->multipartContains($request, 'name="model"', 'faster-whisper-large-v3')
+                && $this->multipartContains($request, 'name="response_format"', 'json')
+                && ! str_contains($body, 'should-be-ignored')
+                && ! str_contains($body, 'srt');
+        });
+    }
+
     public function test_default_transcription_model_falls_back_to_faster_whisper(): void
     {
         $provider = $this->makeProvider([

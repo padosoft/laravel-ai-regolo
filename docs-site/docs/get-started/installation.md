@@ -32,7 +32,7 @@ The service provider is auto-discovered through Composer:
 | --- | --- |
 | PHP | `^8.3` |
 | Laravel components | `^12.0` or `^13.0` |
-| Laravel AI SDK | `^0.6` |
+| Laravel AI SDK | `^0.6 \|\| ^0.7 \|\| ^0.8.1` |
 
 :::warning
 Laravel 11 is not supported because the upstream `laravel/ai` SDK requires Laravel 12 or newer components.

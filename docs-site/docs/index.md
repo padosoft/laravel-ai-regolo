@@ -133,8 +133,8 @@ extends the official SDK through its public contracts and ships everything Regol
     :::
   :::
   ::: grid
-    ::: card "82 tests, 6-cell CI matrix" icon:flask-conical
-    82 unit tests / 184 assertions over a faked HTTP layer (errors, Unicode, batch boundaries, score-ordering, timeouts), plus an opt-in `Live` suite hitting the real `api.regolo.ai`. CI runs PHP 8.3/8.4/8.5 × Laravel 12/13.
+    ::: card "92 tests, 6-cell CI matrix" icon:flask-conical
+    92 unit tests / 194 assertions over a faked HTTP layer (errors, Unicode, batch boundaries, score-ordering, timeouts), plus an opt-in `Live` suite hitting the real `api.regolo.ai`. CI runs PHP 8.3/8.4/8.5 × Laravel 12/13.
     :::
   :::
   ::: grid
