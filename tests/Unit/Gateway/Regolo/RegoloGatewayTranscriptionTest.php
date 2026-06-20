@@ -213,9 +213,9 @@ final class RegoloGatewayTranscriptionTest extends TestCase
 
             return $this->multipartContains($request, 'name="model"', 'faster-whisper-large-v3')
                 && $this->multipartContains($request, 'name="response_format"', 'json')
+                && ! str_contains($body, 'diarized_json')
                 && ! str_contains($body, 'should-be-ignored')
                 && ! str_contains($body, 'srt');
-        });
     }
 
     public function test_default_transcription_model_falls_back_to_faster_whisper(): void
