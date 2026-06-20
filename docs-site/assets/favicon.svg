@@ -1,5 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="laravel-ai-regolo">
-  <rect width="64" height="64" rx="12" fill="#0d9488"/>
-  <path d="M16 16h10v22h22v10H16V16Z" fill="#ffffff"/>
-  <path d="M36 16h12v12H36V16Zm0 18h12v14H36V34Z" fill="#ccfbf1"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" aria-label="laravel-ai-regolo" role="img" viewBox="0 0 64 64"><rect width="64" height="64" fill="#0d9488" rx="12"/><path fill="#fff" d="M16 16h10v22h22v10H16V16Z"/><path fill="#ccfbf1" d="M36 16h12v12H36V16Zm0 18h12v14H36V34Z"/></svg>
