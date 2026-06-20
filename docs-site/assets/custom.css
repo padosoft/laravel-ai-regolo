@@ -1,0 +1,20 @@
+:root {
+  --color-primary: #0d9488;
+  --color-primary-hover: #0f766e;
+  --color-primary-light: rgba(13, 148, 136, 0.12);
+  --color-accent: #2563eb;
+}
+
+.markdown-body img[src*="banner"] {
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #e5e7eb);
+}
+
+.markdown-body table code {
+  white-space: nowrap;
+}
+
+.markdown-body .callout,
+.markdown-body .custom-block {
+  border-radius: 8px;
+}

@@ -1,0 +1,233 @@
+{
+  "title": "laravel-ai-regolo",
+  "description": "Laravel AI SDK provider extension for Seeweb Regolo: chat, embeddings, reranking, image generation, audio transcription, and text-to-speech on Italian sovereign AI infrastructure.",
+  "url": "https://doc.laravel-ai-regolo.padosoft.com",
+  "src": "docs",
+  "out": "_site",
+  "base": "/",
+  "favicon": "assets/favicon.svg",
+  "logo": {
+    "light": "assets/favicon.svg",
+    "dark": "assets/favicon.svg",
+    "alt": "laravel-ai-regolo"
+  },
+  "theme": {
+    "name": "default",
+    "appearance": "system",
+    "customCss": [
+      "assets/custom.css"
+    ]
+  },
+  "layout": {
+    "spa": true,
+    "footer": {
+      "style": "complete",
+      "branding": true,
+      "description": "First-class Regolo provider for the official Laravel AI SDK, maintained by Padosoft.",
+      "copyright": "Apache-2.0. Built by Padosoft.",
+      "columns": [
+        {
+          "title": "Project",
+          "links": [
+            {
+              "text": "GitHub",
+              "url": "https://github.com/padosoft/laravel-ai-regolo"
+            },
+            {
+              "text": "Packagist",
+              "url": "https://packagist.org/packages/padosoft/laravel-ai-regolo"
+            },
+            {
+              "text": "License",
+              "url": "https://github.com/padosoft/laravel-ai-regolo/blob/main/LICENSE"
+            }
+          ]
+        },
+        {
+          "title": "Organization",
+          "links": [
+            {
+              "text": "Padosoft",
+              "url": "https://padosoft.com"
+            },
+            {
+              "text": "Regolo",
+              "url": "https://regolo.ai"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "plugins": {
+    "search": {
+      "semantic": true,
+      "chunkSize": 512,
+      "chunkOverlap": 64,
+      "topK": 10,
+      "showConfidence": true
+    },
+    "git": {
+      "repo": "https://github.com/padosoft/laravel-ai-regolo",
+      "branch": "main",
+      "editLink": true,
+      "lastUpdated": true,
+      "commitHistory": true,
+      "maxCommits": 5
+    },
+    "seo": {
+      "defaultDescription": "Documentation for padosoft/laravel-ai-regolo, the Laravel AI SDK provider for Seeweb Regolo.",
+      "keywords": [
+        "Laravel",
+        "AI",
+        "Regolo",
+        "Seeweb",
+        "sovereign AI",
+        "embeddings",
+        "reranking"
+      ]
+    },
+    "sitemap": {
+      "defaultChangefreq": "weekly",
+      "defaultPriority": 0.8,
+      "rootPriority": 1
+    },
+    "mermaid": {},
+    "math": {},
+    "llms": {},
+    "analytics": false
+  },
+  "navigation": [
+    {
+      "title": "Get Started",
+      "children": [
+        {
+          "title": "Overview",
+          "path": "/"
+        },
+        {
+          "title": "Installation",
+          "path": "/get-started/installation"
+        },
+        {
+          "title": "Quick Start",
+          "path": "/get-started/quick-start"
+        },
+        {
+          "title": "Configuration",
+          "path": "/get-started/configuration"
+        }
+      ]
+    },
+    {
+      "title": "Guides",
+      "children": [
+        {
+          "title": "Chat And Streaming",
+          "path": "/guides/chat-and-streaming"
+        },
+        {
+          "title": "Embeddings",
+          "path": "/guides/embeddings"
+        },
+        {
+          "title": "Reranking",
+          "path": "/guides/reranking"
+        },
+        {
+          "title": "Multimodal",
+          "path": "/guides/multimodal"
+        },
+        {
+          "title": "Worked Example",
+          "path": "/guides/worked-example"
+        }
+      ]
+    },
+    {
+      "title": "Concetti & Teoria",
+      "children": [
+        {
+          "title": "Motivazione",
+          "path": "/concetti/motivazione"
+        },
+        {
+          "title": "Teoria",
+          "path": "/concetti/teoria"
+        },
+        {
+          "title": "Provider Contracts",
+          "path": "/concetti/provider-contracts"
+        }
+      ]
+    },
+    {
+      "title": "Architettura",
+      "children": [
+        {
+          "title": "Design",
+          "path": "/architettura/design"
+        },
+        {
+          "title": "Modello Dati E Contratto",
+          "path": "/architettura/modello-dati-contratto"
+        },
+        {
+          "title": "ADR",
+          "path": "/architettura/adr"
+        }
+      ]
+    },
+    {
+      "title": "Best Practices",
+      "children": [
+        {
+          "title": "Provider Selection",
+          "path": "/best-practices/provider-selection"
+        },
+        {
+          "title": "Security And Privacy",
+          "path": "/best-practices/security-privacy"
+        },
+        {
+          "title": "Testing Strategy",
+          "path": "/best-practices/testing-strategy"
+        }
+      ]
+    },
+    {
+      "title": "Operations",
+      "children": [
+        {
+          "title": "Live Verification",
+          "path": "/operations/live-verification"
+        },
+        {
+          "title": "Troubleshooting",
+          "path": "/operations/troubleshooting"
+        },
+        {
+          "title": "Release Checklist",
+          "path": "/operations/release-checklist"
+        }
+      ]
+    },
+    {
+      "title": "Reference",
+      "children": [
+        {
+          "title": "API Surface",
+          "path": "/reference/api-surface"
+        },
+        {
+          "title": "Models",
+          "path": "/reference/models"
+        },
+        {
+          "title": "Environment",
+          "path": "/reference/environment"
+        }
+      ]
+    }
+  ]
+}

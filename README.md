@@ -21,6 +21,8 @@
 
 ---
 
+📚 Public docs: [doc.laravel-ai-regolo.padosoft.com](https://doc.laravel-ai-regolo.padosoft.com)
+
 ## Table of contents
 
 1. [Why this package](#why-this-package)
@@ -687,3 +689,4 @@ Each is independently usable. None requires the others. Pick what you need.
 <p align="center">
   <sub>Made with ☕ in Italy by <a href="https://padosoft.com">Padosoft</a>.</sub>
 </p>
+
