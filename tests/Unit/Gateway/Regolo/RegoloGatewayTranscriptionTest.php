@@ -218,6 +218,38 @@ final class RegoloGatewayTranscriptionTest extends TestCase
         });
     }
 
+    public function test_generate_transcription_drops_null_provider_options(): void
+    {
+        // A caller that builds `$providerOptions` from optional config
+        // may pass a `null` entry. Regolo's transcription endpoint (like
+        // OpenAI Whisper) rejects null form values with a 422, so the
+        // gateway must strip them after merging rather than emit an
+        // empty multipart part. Non-null falsy values (e.g. `0`) must
+        // still survive.
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            providerOptions: ['language' => null, 'temperature' => 0, 'prompt' => 'keep me'],
+        );
+
+        Http::assertSent(function (Request $request) {
+            $body = (string) $request->body();
+
+            return ! str_contains($body, 'name="language"')
+                && $this->multipartContains($request, 'name="temperature"', '0')
+                && $this->multipartContains($request, 'name="prompt"', 'keep me');
+        });
+    }
+
     public function test_default_transcription_model_falls_back_to_faster_whisper(): void
     {
         $provider = $this->makeProvider([

@@ -395,6 +395,14 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
      * fields win over any same-named key in `$providerOptions`, mirroring
      * the upstream OpenAiGateway merge order.
      *
+     * Null values are stripped from the merged body — a caller that
+     * builds `$providerOptions` from optional config (`['language' =>
+     * null, ...]`) must not turn that null into an empty multipart part,
+     * because Regolo's endpoint (like OpenAI Whisper) rejects null form
+     * values with a 422. The `null`-only filter (`$v !== null`) is
+     * deliberate: legitimate falsy values such as `temperature => 0`
+     * must still reach the wire.
+     *
      * @param  array<string, mixed>  $providerOptions
      */
     public function generateTranscription(
@@ -410,11 +418,11 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
             $provider->name(),
             fn () => $this->client($provider, $timeout)
                 ->attach('file', $audio->content(), $this->audioFilename($audio), ['Content-Type' => $audio->mimeType()])
-                ->post('audio/transcriptions', array_merge($providerOptions, array_filter([
+                ->post('audio/transcriptions', array_filter(array_merge($providerOptions, [
                     'model' => $model,
                     'language' => $language,
                     'response_format' => $diarize ? 'diarized_json' : 'json',
-                ], fn ($v) => $v !== null))),
+                ]), fn ($v) => $v !== null)),
         );
 
         $data = $response->json();
