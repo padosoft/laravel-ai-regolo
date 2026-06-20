@@ -651,7 +651,7 @@ Open an issue or PR if you want a `workflow_dispatch` job added to this repo to 
 | v1.2    | shipped  | `laravel/ai` v0.7 + v0.8 compatibility. `generateTranscription` now forwards `$providerOptions` (added to the SDK's `TranscriptionGateway` contract in laravel/ai v0.7.0); dependency constraint widened to `^0.6 \|\| ^0.7 \|\| ^0.8.1` so 0.6 consumers keep working while 0.8 apps can finally install. 92 tests / 194 assertions. |
 | v0.3    | planned  | Provider-tools registry (Regolo-hosted web search / code interpreter, when published).                       |
 | v0.4    | exploring | Adaptive routing helper — pick `cheapest` vs `smartest` model per prompt with a small classifier.            |
-| v1.0    | tracking | Stable contract pinned against `laravel/ai` ^1.0 GA.                                                         |
+| v2.0    | tracking | Stable contract pinned against `laravel/ai` ^1.0 GA.                                                         |
 
 Open issues and feature votes: [github.com/padosoft/laravel-ai-regolo/issues](https://github.com/padosoft/laravel-ai-regolo/issues).
 
