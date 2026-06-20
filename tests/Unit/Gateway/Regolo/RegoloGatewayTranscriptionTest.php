@@ -216,6 +216,7 @@ final class RegoloGatewayTranscriptionTest extends TestCase
                 && ! str_contains($body, 'diarized_json')
                 && ! str_contains($body, 'should-be-ignored')
                 && ! str_contains($body, 'srt');
+        });
     }
 
     public function test_generate_transcription_drops_null_provider_options(): void
