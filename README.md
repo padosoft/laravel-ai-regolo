@@ -100,7 +100,7 @@ The package has zero dependencies on AskMyDocs, Padosoft proprietary code, or an
 - **Tool calling** — native function calling on models that support it; ReAct-style fallback on those that don't.
 - **Strict typing** — PHP 8.3+, readonly DTOs, fully-typed signatures, Pint-formatted, PHPStan level 6.
 - **CI matrix** — every push runs against PHP 8.3 / 8.4 / 8.5 × Laravel 12 / 13 (6 jobs). Laravel 11 is **not supported** — `laravel/ai` itself requires `illuminate/support: ^12.0|^13.0`.
-- **93 unit tests / 195 assertions** — every Python-SDK happy-path is ported, plus 60+ robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn / timeout-fallback misconfiguration / image-edit rejection / multipart-language omission / diarization toggling).
+- **94 unit tests / 196 assertions** — every Python-SDK happy-path is ported, plus 60+ robustness scenarios (4xx / 429 / 503 / connection-failure / malformed-JSON / Unicode / very-long-prompts / batch boundaries / score-ordering / multi-turn / timeout-fallback misconfiguration / image-edit rejection / multipart-language omission / diarization toggling).
 - 🚀 **AI vibe-coding pack ships in the box** — every release includes the [Padosoft Claude pack](#ai-vibe-coding-pack-included) under `.claude/` (skills, rules, agents, slash-commands). The moment you `composer require` this package and open the project in Claude Code, the agent picks up Padosoft's house conventions automatically. **No other Laravel AI provider package ships this today.**
 - 🧪 **Opt-in live test suite** — point `REGOLO_API_KEY` at a real key and run `vendor/bin/phpunit --testsuite Live` to verify wire compatibility against `api.regolo.ai`. Default suite remains 100% offline. See [Running the live test suite](#running-the-live-test-suite-against-the-real-regolo-api).
 
@@ -136,7 +136,7 @@ If you are evaluating how to call Regolo from a Laravel app, here are the realis
 | Same API as 14+ other providers             |           ❌           |        ✅         |          ❌           |               ✅                |
 | First-class Laravel facade & queue support  |           ❌           |        ✅         |          ⚠️ partial    |               ✅                |
 | Vercel AI SDK UI compatibility (streaming)  |           ❌           |        ❌         |          ❌           |               ✅                |
-| 93 tests / 6-cell CI matrix                 |           ❌           |       N/A         |          ❌           |               ✅                |
+| 94 tests / 6-cell CI matrix                 |           ❌           |       N/A         |          ❌           |               ✅                |
 | Maintenance burden when SDK ships features  |           you          |       N/A         |          you          |        you get them free        |
 
 **Bottom line:** if you want Regolo behind the same API surface that powers OpenAI, Anthropic, Gemini, Mistral, and Ollama in `laravel/ai`, this is the only package that does it.
@@ -469,12 +469,12 @@ The same pack is shared across `padosoft/laravel-ai-regolo`, `padosoft/laravel-f
 
 ### Default suite — offline, zero cost, runs everywhere
 
-The package ships **93 unit tests / 195 assertions** that run against a fake HTTP layer (`Http::fake()`), so the test suite never hits the real Regolo API and is safe to run in CI on every PR. No API key needed; no network needed; no money spent.
+The package ships **94 unit tests / 196 assertions** that run against a fake HTTP layer (`Http::fake()`), so the test suite never hits the real Regolo API and is safe to run in CI on every PR. No API key needed; no network needed; no money spent.
 
 ```bash
 composer install
 vendor/bin/phpunit
-# OK (93 tests, 195 assertions)
+# OK (94 tests, 196 assertions)
 ```
 
 Coverage breakdown:
@@ -648,7 +648,7 @@ Open an issue or PR if you want a `workflow_dispatch` job added to this repo to 
 |---------|----------|-------------------------------------------------------------------------------------------------------------|
 | v0.1    | shipped  | Chat + streaming + embeddings + reranking + 61 tests + 6-cell CI matrix + WOW README + opt-in Live testsuite + AI vibe-coding pack. **First public release.** |
 | v0.2    | shipped  | Multimodal: image generation (`Image::of(...)->generate('regolo', ...)` against `/v1/images/generations`, default `Qwen-Image`), audio transcription (`Transcription::of($audio)->using('regolo', ...)->generate()` against `/v1/audio/transcriptions`, default `faster-whisper-large-v3`), text-to-speech (`Audio::for($text)->generate('regolo', ...)` against `/v1/audio/speech`). 82 tests / 184 assertions. |
-| v1.2    | shipped  | `laravel/ai` v0.7 + v0.8 compatibility. `generateTranscription` now forwards `$providerOptions` (added to the SDK's `TranscriptionGateway` contract in laravel/ai v0.7.0); dependency constraint widened to `^0.6 \|\| ^0.7 \|\| ^0.8.1` so 0.6 consumers keep working while 0.8 apps can finally install. 93 tests / 195 assertions. |
+| v1.2    | shipped  | `laravel/ai` v0.7 + v0.8 compatibility. `generateTranscription` now forwards `$providerOptions` (added to the SDK's `TranscriptionGateway` contract in laravel/ai v0.7.0); dependency constraint widened to `^0.6 \|\| ^0.7 \|\| ^0.8` so 0.6 consumers keep working while 0.8 apps can finally install. 94 tests / 196 assertions. |
 | next    | planned  | Provider-tools registry (Regolo-hosted web search / code interpreter, when published).                       |
 | later   | exploring | Adaptive routing helper — pick `cheapest` vs `smartest` model per prompt with a small classifier.            |
 | v2.0    | tracking | Stable contract pinned against `laravel/ai` ^1.0 GA.                                                         |

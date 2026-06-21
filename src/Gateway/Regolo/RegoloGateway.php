@@ -414,15 +414,34 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         int $timeout = 30,
         array $providerOptions = [],
     ): TranscriptionResponse {
+        // Filter the explicit fields for nulls FIRST, then merge over
+        // `$providerOptions`. Two reasons this order matters:
+        //  - a null `$language` (dedicated arg omitted) must NOT be
+        //    injected, otherwise it would override a `language` a caller
+        //    set via `$providerOptions` and then be stripped — making
+        //    that option unreachable;
+        //  - explicit non-null fields still win over the same-named
+        //    provider-option key, matching the upstream OpenAiGateway.
+        // The outer `null`-only filter then drops any null carried in
+        // `$providerOptions` itself, while keeping legitimate falsy
+        // values such as `temperature => 0`.
+        $payload = array_filter(
+            array_merge(
+                $providerOptions,
+                array_filter([
+                    'model' => $model,
+                    'language' => $language,
+                    'response_format' => $diarize ? 'diarized_json' : 'json',
+                ], fn ($v) => $v !== null),
+            ),
+            fn ($v) => $v !== null,
+        );
+
         $response = $this->withErrorHandling(
             $provider->name(),
             fn () => $this->client($provider, $timeout)
                 ->attach('file', $audio->content(), $this->audioFilename($audio), ['Content-Type' => $audio->mimeType()])
-                ->post('audio/transcriptions', array_filter(array_merge($providerOptions, [
-                    'model' => $model,
-                    'language' => $language,
-                    'response_format' => $diarize ? 'diarized_json' : 'json',
-                ]), fn ($v) => $v !== null)),
+                ->post('audio/transcriptions', $payload),
         );
 
         $data = $response->json();

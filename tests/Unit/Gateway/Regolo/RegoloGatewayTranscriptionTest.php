@@ -208,15 +208,42 @@ final class RegoloGatewayTranscriptionTest extends TestCase
             providerOptions: ['model' => 'should-be-ignored', 'response_format' => 'srt'],
         );
 
+        // Assert EXACT field values rather than negative substring
+        // checks: proving `model === faster-whisper-large-v3` and
+        // `response_format === json` is what establishes precedence —
+        // the provider-option `should-be-ignored` / `srt` values simply
+        // never become the field value. Negative `str_contains` checks
+        // would be flaky (multipart boundary hashes and unrelated bytes
+        // can incidentally contain those substrings).
         Http::assertSent(function (Request $request) {
-            $body = (string) $request->body();
-
-            return $this->multipartContains($request, 'name="model"', 'faster-whisper-large-v3')
+            return $this->multipartFieldEquals($request, 'model', 'faster-whisper-large-v3')
                 && $this->multipartFieldEquals($request, 'response_format', 'json')
-                && ! str_contains($body, 'diarized_json')
-                && ! str_contains($body, 'should-be-ignored')
-                && ! str_contains($body, 'srt');
+                && $this->multipartFieldEquals($request, 'language', 'it');
         });
+    }
+
+    public function test_generate_transcription_allows_language_via_provider_options_when_arg_omitted(): void
+    {
+        // When the dedicated `$language` argument is omitted, a
+        // `language` supplied through `$providerOptions` must still
+        // reach the wire — the implicit null `$language` must not
+        // clobber it.
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            providerOptions: ['language' => 'de'],
+        );
+
+        Http::assertSent(fn (Request $request) => $this->multipartFieldEquals($request, 'language', 'de'));
     }
 
     public function test_generate_transcription_drops_null_provider_options(): void

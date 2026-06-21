@@ -10,7 +10,7 @@ description: "A first-class Seeweb Regolo provider for laravel/ai — chat, stre
 ![Laravel 12 | 13](https://img.shields.io/badge/laravel-12%20%7C%2013-FF2D20?style=flat-square&logo=laravel&logoColor=white)
 ![PHP 8.3 | 8.4 | 8.5](https://img.shields.io/badge/php-8.3%20%7C%208.4%20%7C%208.5-777BB4?style=flat-square&logo=php&logoColor=white)
 ![Packagist](https://img.shields.io/packagist/v/padosoft/laravel-ai-regolo.svg?style=flat-square&label=packagist)
-![Tests 93](https://img.shields.io/badge/tests-93%20%2F%20195%20assertions-22C55E?style=flat-square)
+![Tests 94](https://img.shields.io/badge/tests-94%20%2F%20196%20assertions-22C55E?style=flat-square)
 ![License Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)
 
 > **laravel-ai-regolo makes Seeweb's Italian sovereign AI cloud a drop-in provider for the official `laravel/ai` SDK.**
@@ -133,8 +133,8 @@ extends the official SDK through its public contracts and ships everything Regol
     :::
   :::
   ::: grid
-    ::: card "93 tests, 6-cell CI matrix" icon:flask-conical
-    93 unit tests / 195 assertions over a faked HTTP layer (errors, Unicode, batch boundaries, score-ordering, timeouts), plus an opt-in `Live` suite hitting the real `api.regolo.ai`. CI runs PHP 8.3/8.4/8.5 × Laravel 12/13.
+    ::: card "94 tests, 6-cell CI matrix" icon:flask-conical
+    94 unit tests / 196 assertions over a faked HTTP layer (errors, Unicode, batch boundaries, score-ordering, timeouts), plus an opt-in `Live` suite hitting the real `api.regolo.ai`. CI runs PHP 8.3/8.4/8.5 × Laravel 12/13.
     :::
   :::
   ::: grid
