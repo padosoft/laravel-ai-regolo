@@ -387,6 +387,23 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
      * `response_format=diarized_json`; not every Regolo Whisper variant
      * supports it — the upstream returns a plain `text` field if not, and
      * the response shape stays compatible.
+     *
+     * `$providerOptions` (added to the SDK's `TranscriptionGateway`
+     * contract in laravel/ai v0.7.0) is merged into the multipart body
+     * so callers can forward Regolo-specific knobs (e.g. `prompt`,
+     * `temperature`). Explicit `model` / `language` / `response_format`
+     * fields win over any same-named key in `$providerOptions`, mirroring
+     * the upstream OpenAiGateway merge order.
+     *
+     * Null values are stripped from the merged body — a caller that
+     * builds `$providerOptions` from optional config (`['language' =>
+     * null, ...]`) must not turn that null into an empty multipart part,
+     * because Regolo's endpoint (like OpenAI Whisper) rejects null form
+     * values with a 422. The `null`-only filter (`$v !== null`) is
+     * deliberate: legitimate falsy values such as `temperature => 0`
+     * must still reach the wire.
+     *
+     * @param  array<string, mixed>  $providerOptions
      */
     public function generateTranscription(
         TranscriptionProvider $provider,
@@ -395,16 +412,36 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
         ?string $language = null,
         bool $diarize = false,
         int $timeout = 30,
+        array $providerOptions = [],
     ): TranscriptionResponse {
+        // Filter the explicit fields for nulls FIRST, then merge over
+        // `$providerOptions`. Two reasons this order matters:
+        //  - a null `$language` (dedicated arg omitted) must NOT be
+        //    injected, otherwise it would override a `language` a caller
+        //    set via `$providerOptions` and then be stripped — making
+        //    that option unreachable;
+        //  - explicit non-null fields still win over the same-named
+        //    provider-option key, matching the upstream OpenAiGateway.
+        // The outer `null`-only filter then drops any null carried in
+        // `$providerOptions` itself, while keeping legitimate falsy
+        // values such as `temperature => 0`.
+        $payload = array_filter(
+            array_merge(
+                $providerOptions,
+                array_filter([
+                    'model' => $model,
+                    'language' => $language,
+                    'response_format' => $diarize ? 'diarized_json' : 'json',
+                ], fn ($v) => $v !== null),
+            ),
+            fn ($v) => $v !== null,
+        );
+
         $response = $this->withErrorHandling(
             $provider->name(),
             fn () => $this->client($provider, $timeout)
                 ->attach('file', $audio->content(), $this->audioFilename($audio), ['Content-Type' => $audio->mimeType()])
-                ->post('audio/transcriptions', array_filter([
-                    'model' => $model,
-                    'language' => $language,
-                    'response_format' => $diarize ? 'diarized_json' : 'json',
-                ], fn ($v) => $v !== null)),
+                ->post('audio/transcriptions', $payload),
         );
 
         $data = $response->json();

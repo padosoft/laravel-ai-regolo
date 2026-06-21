@@ -70,9 +70,9 @@ final class RegoloGatewayTranscriptionTest extends TestCase
         Http::assertSent(function (Request $request) {
             return str_ends_with($request->url(), '/audio/transcriptions')
                 && $request->method() === 'POST'
-                && $this->multipartContains($request, 'name="model"', 'faster-whisper-large-v3')
-                && $this->multipartContains($request, 'name="language"', 'it')
-                && $this->multipartContains($request, 'name="response_format"', 'json');
+                && $this->multipartFieldEquals($request, 'model', 'faster-whisper-large-v3')
+                && $this->multipartFieldEquals($request, 'language', 'it')
+                && $this->multipartFieldEquals($request, 'response_format', 'json');
         });
     }
 
@@ -154,6 +154,127 @@ final class RegoloGatewayTranscriptionTest extends TestCase
             // an explicit `null` would surface as a 422. The multipart
             // body therefore must NOT contain a `language` part.
             return ! str_contains((string) $request->body(), 'name="language"');
+        });
+    }
+
+    public function test_generate_transcription_forwards_provider_options(): void
+    {
+        // `$providerOptions` was added to the SDK's TranscriptionGateway
+        // contract in laravel/ai v0.7.0 (PR #31). The gateway merges it
+        // into the multipart body so Regolo-specific knobs (e.g.
+        // `prompt`, `temperature`) reach the wire.
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            language: 'it',
+            providerOptions: ['prompt' => 'Glossario Regolo', 'temperature' => '0'],
+        );
+
+        Http::assertSent(function (Request $request) {
+            return $this->multipartFieldEquals($request, 'prompt', 'Glossario Regolo')
+                && $this->multipartFieldEquals($request, 'temperature', '0')
+                && $this->multipartFieldEquals($request, 'language', 'it');
+        });
+    }
+
+    public function test_generate_transcription_explicit_fields_win_over_provider_options(): void
+    {
+        // Explicit model / language / response_format must override any
+        // same-named key passed through `$providerOptions`, mirroring the
+        // upstream OpenAiGateway merge order
+        // (`array_merge($providerOptions, $explicit)`).
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            language: 'it',
+            providerOptions: ['model' => 'should-be-ignored', 'response_format' => 'srt'],
+        );
+
+        // Assert EXACT field values rather than negative substring
+        // checks: proving `model === faster-whisper-large-v3` and
+        // `response_format === json` is what establishes precedence —
+        // the provider-option `should-be-ignored` / `srt` values simply
+        // never become the field value. Negative `str_contains` checks
+        // would be flaky (multipart boundary hashes and unrelated bytes
+        // can incidentally contain those substrings).
+        Http::assertSent(function (Request $request) {
+            return $this->multipartFieldEquals($request, 'model', 'faster-whisper-large-v3')
+                && $this->multipartFieldEquals($request, 'response_format', 'json')
+                && $this->multipartFieldEquals($request, 'language', 'it');
+        });
+    }
+
+    public function test_generate_transcription_allows_language_via_provider_options_when_arg_omitted(): void
+    {
+        // When the dedicated `$language` argument is omitted, a
+        // `language` supplied through `$providerOptions` must still
+        // reach the wire — the implicit null `$language` must not
+        // clobber it.
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            providerOptions: ['language' => 'de'],
+        );
+
+        Http::assertSent(fn (Request $request) => $this->multipartFieldEquals($request, 'language', 'de'));
+    }
+
+    public function test_generate_transcription_drops_null_provider_options(): void
+    {
+        // A caller that builds `$providerOptions` from optional config
+        // may pass a `null` entry. Regolo's transcription endpoint (like
+        // OpenAI Whisper) rejects null form values with a 422, so the
+        // gateway must strip them after merging rather than emit an
+        // empty multipart part. Non-null falsy values (e.g. `0`) must
+        // still survive.
+        Http::fake([
+            'api.regolo.test/v1/audio/transcriptions' => Http::response(['text' => 'ok']),
+        ]);
+
+        $gateway = new RegoloGateway($this->app->make('events'));
+
+        $audio = new Base64Audio(base64_encode('audio'), 'audio/wav');
+
+        $gateway->generateTranscription(
+            $this->makeProvider(),
+            'faster-whisper-large-v3',
+            $audio,
+            providerOptions: ['language' => null, 'temperature' => 0, 'prompt' => 'keep me'],
+        );
+
+        Http::assertSent(function (Request $request) {
+            $body = (string) $request->body();
+
+            return ! str_contains($body, 'name="language"')
+                && $this->multipartFieldEquals($request, 'temperature', '0')
+                && $this->multipartFieldEquals($request, 'prompt', 'keep me');
         });
     }
 
@@ -267,6 +388,48 @@ final class RegoloGatewayTranscriptionTest extends TestCase
 
         return str_contains($body, $dispositionFragment)
             && str_contains($body, $expectedValue);
+    }
+
+    /**
+     * Assert that a named multipart field carries EXACTLY `$expectedValue`.
+     *
+     * `multipartContains()` is a substring check, so asserting
+     * `response_format = json` with it would also pass for
+     * `diarized_json` (which contains the substring `json`) — a
+     * regression sending the wrong format could slip through. This
+     * helper pins the part's value precisely.
+     *
+     * It is boundary-aware: it extracts the multipart boundary from the
+     * `Content-Type` header, anchors on the part's
+     * `Content-Disposition` line (so it cannot accidentally match a
+     * `name="..."` sequence sitting inside the uploaded file bytes), and
+     * captures the value up to the closing boundary delimiter rather
+     * than the next CRLF — so the helper stays correct for multi-line
+     * values and binary payloads.
+     */
+    private function multipartFieldEquals(Request $request, string $name, string $expectedValue): bool
+    {
+        $contentType = $request->header('Content-Type')[0] ?? '';
+
+        if (preg_match('/boundary=(.+)$/', $contentType, $boundaryMatch) !== 1) {
+            return false;
+        }
+
+        $boundary = $boundaryMatch[1];
+        $body = (string) $request->body();
+
+        // Anchor on the Content-Disposition line; allow an optional
+        // trailing param list (e.g. `; filename="..."`) and any further
+        // per-part headers (e.g. a `Content-Length` line some encoders
+        // add) before the blank-line value separator; capture up to the
+        // closing `--<boundary>` delimiter.
+        $pattern = '/Content-Disposition: form-data; name="'.preg_quote($name, '/').'"(?:;[^\r\n]*)?\r?\n(?:[^\r\n]+\r?\n)*\r?\n(.*?)\r?\n--'.preg_quote($boundary, '/').'/s';
+
+        if (preg_match($pattern, $body, $matches) !== 1) {
+            return false;
+        }
+
+        return $matches[1] === $expectedValue;
     }
 
     /**
