@@ -70,9 +70,9 @@ final class RegoloGatewayTranscriptionTest extends TestCase
         Http::assertSent(function (Request $request) {
             return str_ends_with($request->url(), '/audio/transcriptions')
                 && $request->method() === 'POST'
-                && $this->multipartContains($request, 'name="model"', 'faster-whisper-large-v3')
-                && $this->multipartContains($request, 'name="language"', 'it')
-                && $this->multipartContains($request, 'name="response_format"', 'json');
+                && $this->multipartFieldEquals($request, 'model', 'faster-whisper-large-v3')
+                && $this->multipartFieldEquals($request, 'language', 'it')
+                && $this->multipartFieldEquals($request, 'response_format', 'json');
         });
     }
 
@@ -180,9 +180,9 @@ final class RegoloGatewayTranscriptionTest extends TestCase
         );
 
         Http::assertSent(function (Request $request) {
-            return $this->multipartContains($request, 'name="prompt"', 'Glossario Regolo')
-                && $this->multipartContains($request, 'name="temperature"', '0')
-                && $this->multipartContains($request, 'name="language"', 'it');
+            return $this->multipartFieldEquals($request, 'prompt', 'Glossario Regolo')
+                && $this->multipartFieldEquals($request, 'temperature', '0')
+                && $this->multipartFieldEquals($request, 'language', 'it');
         });
     }
 
@@ -273,8 +273,8 @@ final class RegoloGatewayTranscriptionTest extends TestCase
             $body = (string) $request->body();
 
             return ! str_contains($body, 'name="language"')
-                && $this->multipartContains($request, 'name="temperature"', '0')
-                && $this->multipartContains($request, 'name="prompt"', 'keep me');
+                && $this->multipartFieldEquals($request, 'temperature', '0')
+                && $this->multipartFieldEquals($request, 'prompt', 'keep me');
         });
     }
 
