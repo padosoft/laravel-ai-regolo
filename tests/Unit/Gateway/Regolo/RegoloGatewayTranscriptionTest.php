@@ -212,7 +212,7 @@ final class RegoloGatewayTranscriptionTest extends TestCase
             $body = (string) $request->body();
 
             return $this->multipartContains($request, 'name="model"', 'faster-whisper-large-v3')
-                && $this->multipartContains($request, 'name="response_format"', 'json')
+                && $this->multipartFieldEquals($request, 'response_format', 'json')
                 && ! str_contains($body, 'diarized_json')
                 && ! str_contains($body, 'should-be-ignored')
                 && ! str_contains($body, 'srt');
@@ -361,6 +361,33 @@ final class RegoloGatewayTranscriptionTest extends TestCase
 
         return str_contains($body, $dispositionFragment)
             && str_contains($body, $expectedValue);
+    }
+
+    /**
+     * Assert that a named multipart field carries EXACTLY `$expectedValue`.
+     *
+     * `multipartContains()` is a substring check, so asserting
+     * `response_format = json` with it would also pass for
+     * `diarized_json` (which contains the substring `json`) — a
+     * regression sending the wrong format could slip through. This
+     * helper pins the part's value precisely by capturing everything
+     * between the part's blank-line separator and the next CRLF, so
+     * `json` and `diarized_json` are distinguishable.
+     */
+    private function multipartFieldEquals(Request $request, string $name, string $expectedValue): bool
+    {
+        $body = (string) $request->body();
+
+        // Allow optional per-part headers (e.g. a `Content-Length` line
+        // some multipart encoders add) between the Content-Disposition
+        // line and the blank-line value separator.
+        $pattern = '/name="'.preg_quote($name, '/').'"\r?\n(?:[^\r\n]+\r?\n)*\r?\n(.*?)\r?\n/s';
+
+        if (preg_match($pattern, $body, $matches) !== 1) {
+            return false;
+        }
+
+        return $matches[1] === $expectedValue;
     }
 
     /**
