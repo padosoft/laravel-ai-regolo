@@ -397,18 +397,33 @@ final class RegoloGatewayTranscriptionTest extends TestCase
      * `response_format = json` with it would also pass for
      * `diarized_json` (which contains the substring `json`) — a
      * regression sending the wrong format could slip through. This
-     * helper pins the part's value precisely by capturing everything
-     * between the part's blank-line separator and the next CRLF, so
-     * `json` and `diarized_json` are distinguishable.
+     * helper pins the part's value precisely.
+     *
+     * It is boundary-aware: it extracts the multipart boundary from the
+     * `Content-Type` header, anchors on the part's
+     * `Content-Disposition` line (so it cannot accidentally match a
+     * `name="..."` sequence sitting inside the uploaded file bytes), and
+     * captures the value up to the closing boundary delimiter rather
+     * than the next CRLF — so the helper stays correct for multi-line
+     * values and binary payloads.
      */
     private function multipartFieldEquals(Request $request, string $name, string $expectedValue): bool
     {
+        $contentType = $request->header('Content-Type')[0] ?? '';
+
+        if (preg_match('/boundary=(.+)$/', $contentType, $boundaryMatch) !== 1) {
+            return false;
+        }
+
+        $boundary = $boundaryMatch[1];
         $body = (string) $request->body();
 
-        // Allow optional per-part headers (e.g. a `Content-Length` line
-        // some multipart encoders add) between the Content-Disposition
-        // line and the blank-line value separator.
-        $pattern = '/name="'.preg_quote($name, '/').'"\r?\n(?:[^\r\n]+\r?\n)*\r?\n(.*?)\r?\n/s';
+        // Anchor on the Content-Disposition line; allow an optional
+        // trailing param list (e.g. `; filename="..."`) and any further
+        // per-part headers (e.g. a `Content-Length` line some encoders
+        // add) before the blank-line value separator; capture up to the
+        // closing `--<boundary>` delimiter.
+        $pattern = '/Content-Disposition: form-data; name="'.preg_quote($name, '/').'"(?:;[^\r\n]*)?\r?\n(?:[^\r\n]+\r?\n)*\r?\n(.*?)\r?\n--'.preg_quote($boundary, '/').'/s';
 
         if (preg_match($pattern, $body, $matches) !== 1) {
             return false;
