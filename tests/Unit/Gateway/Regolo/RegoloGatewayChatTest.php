@@ -10,8 +10,10 @@ use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\AiServiceProvider;
 use Laravel\Ai\Exceptions\AiException;
+use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
+use Laravel\Ai\Gateway\StepContext;
 use Laravel\Ai\Gateway\TextGenerationOptions;
 use Laravel\Ai\Messages\AssistantMessage;
 use Laravel\Ai\Messages\Message;
@@ -65,7 +67,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $response = $gateway->generateText(
+        $response = $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -92,7 +94,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $response = $gateway->generateText(
+        $response = $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             'You are a helpful assistant.',
@@ -134,7 +136,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(['key' => 'static-key']),
             'Llama-3.1-8B-Instruct',
             null,
@@ -162,7 +164,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $response = $gateway->generateText(
+        $response = $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.3-70B-Instruct',
             null,
@@ -184,7 +186,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $events = iterator_to_array($gateway->streamText(
+        $events = iterator_to_array($this->streamStep($gateway,
             'inv-test',
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
@@ -200,9 +202,15 @@ final class RegoloGatewayChatTest extends TestCase
         $textStart = array_filter($events, fn ($e) => $e instanceof TextStart);
         $textEnd = array_filter($events, fn ($e) => $e instanceof TextEnd);
         $this->assertCount(1, $start);
-        $this->assertCount(1, $end);
         $this->assertCount(1, $textStart);
         $this->assertCount(1, $textEnd);
+
+        // No StreamEnd, and that is the contract rather than an omission: a
+        // step does not end the stream, a conversation does. From
+        // laravel/ai 0.11 the SDK owns the loop and emits the end event once
+        // it decides there is no further step, so a gateway emitting one here
+        // would close a stream the SDK intends to continue.
+        $this->assertCount(0, $end);
 
         Http::assertSent(function (Request $request) {
             return $request->data()['stream'] === true
@@ -212,12 +220,18 @@ final class RegoloGatewayChatTest extends TestCase
 
     /**
      * SDK behaviour: HandlesFailoverErrors does NOT retry on plain 5xx.
-     * 503 specifically maps to ProviderOverloadedException; other 5xx
-     * surface as RequestException. This test pins the documented
-     * non-retry contract — callers wanting retries layer Http::retry()
-     * via a custom client decorator.
+     *
+     * From laravel/ai 0.11 every 5xx maps to ProviderOverloadedException,
+     * not only 503 — the SDK now wraps provider failures in typed exceptions
+     * instead of letting the raw Http client one through. A 4xx still
+     * surfaces raw, deliberately: a 400 is a client error, and collapsing the
+     * two would lose the distinction that tells a caller whether retrying
+     * could ever help.
+     *
+     * This test pins the non-retry contract — callers wanting retries layer
+     * Http::retry() via a custom client decorator.
      */
-    public function test_chat_5xx_surfaces_as_request_exception_no_retry(): void
+    public function test_chat_5xx_surfaces_as_provider_overloaded_no_retry(): void
     {
         Http::fake([
             'api.regolo.test/v1/chat/completions' => Http::response(
@@ -228,9 +242,9 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(RequestException::class);
+        $this->expectException(ProviderOverloadedException::class);
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -254,7 +268,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $this->expectException(RequestException::class);
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'unknown-model',
             null,
@@ -285,7 +299,7 @@ final class RegoloGatewayChatTest extends TestCase
         $exception = null;
 
         try {
-            $gateway->generateText(
+            $this->generateStep($gateway,
                 $this->makeProvider(['key' => 'wrong-key']),
                 'Llama-3.1-8B-Instruct',
                 null,
@@ -313,7 +327,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $this->expectException(RateLimitedException::class);
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -334,7 +348,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $this->expectException(ProviderOverloadedException::class);
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -342,7 +356,7 @@ final class RegoloGatewayChatTest extends TestCase
         );
     }
 
-    public function test_chat_connection_failure_surfaces_as_connection_exception(): void
+    public function test_chat_connection_failure_surfaces_as_provider_connection_exception(): void
     {
         Http::fake([
             'api.regolo.test/v1/chat/completions' => fn () => throw new ConnectionException('cURL error 28: Operation timed out'),
@@ -350,9 +364,9 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(ConnectionException::class);
+        $this->expectException(ProviderConnectionException::class);
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -374,7 +388,7 @@ final class RegoloGatewayChatTest extends TestCase
         $this->expectException(AiException::class);
         $this->expectExceptionMessageMatches('/Regolo Error:.*invalid_response/');
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -390,7 +404,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             'Sei un assistente.',
@@ -425,8 +439,8 @@ final class RegoloGatewayChatTest extends TestCase
         $gateway = new RegoloGateway($this->app->make('events'));
         $provider = $this->makeProvider();
 
-        $gateway->generateText($provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('cheap model')]);
-        $gateway->generateText($provider, 'Llama-3.3-70B-Instruct', null, [new UserMessage('smart model')]);
+        $this->generateStep($gateway, $provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('cheap model')]);
+        $this->generateStep($gateway, $provider, 'Llama-3.3-70B-Instruct', null, [new UserMessage('smart model')]);
 
         Http::assertSentCount(2);
 
@@ -465,7 +479,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $response = $gateway->generateText(
+        $response = $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -488,7 +502,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -512,9 +526,9 @@ final class RegoloGatewayChatTest extends TestCase
         $gateway = new RegoloGateway($this->app->make('events'));
         $provider = $this->makeProvider();
 
-        $r1 = $gateway->generateText($provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('q1')]);
-        $r2 = $gateway->generateText($provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('q2')]);
-        $r3 = $gateway->generateText($provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('q3')]);
+        $r1 = $this->generateStep($gateway, $provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('q1')]);
+        $r2 = $this->generateStep($gateway, $provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('q2')]);
+        $r3 = $this->generateStep($gateway, $provider, 'Llama-3.1-8B-Instruct', null, [new UserMessage('q3')]);
 
         $this->assertSame('answer-1', $r1->text);
         $this->assertSame('answer-2', $r2->text);
@@ -534,7 +548,7 @@ final class RegoloGatewayChatTest extends TestCase
             temperature: 0.42,
         );
 
-        $gateway->generateText(
+        $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -558,7 +572,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $response = $gateway->generateText(
+        $response = $this->generateStep($gateway,
             $this->makeProvider(['url' => 'https://api.regolo-staging.test/v1']),
             'Llama-3.1-8B-Instruct',
             null,
@@ -580,7 +594,7 @@ final class RegoloGatewayChatTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $response = $gateway->generateText(
+        $response = $this->generateStep($gateway,
             $this->makeProvider(),
             'Llama-3.1-8B-Instruct',
             null,
@@ -588,7 +602,10 @@ final class RegoloGatewayChatTest extends TestCase
         );
 
         $this->assertSame('truncated', $response->text);
-        $this->assertSame(FinishReason::Length, $response->steps->first()->finishReason);
+        // A StepResponse describes ONE step, so the finish reason is on it
+        // directly. `steps` belonged to the old multi-step TextResponse, which
+        // the SDK now assembles itself from the steps a gateway returns.
+        $this->assertSame(FinishReason::Length, $response->finishReason);
     }
 
     /**
@@ -691,5 +708,72 @@ final class RegoloGatewayChatTest extends TestCase
         $lines[] = '';
 
         return implode("\n", $lines);
+    }
+
+    /**
+     * Drive one text step through the 0.11 gateway contract.
+     *
+     * The SDK owns the multi-step loop now, so the gateway takes a
+     * StepContext and returns a StepResponse for a SINGLE request. These
+     * helpers keep the call sites reading like the behaviour under test
+     * rather than like an argument list.
+     *
+     * @param  array<int, mixed>  $messages
+     * @param  array<int, mixed>  $tools
+     * @param  array<string, mixed>|null  $schema
+     */
+    private function generateStep(
+        RegoloGateway $gateway,
+        $provider,
+        string $model,
+        ?string $instructions,
+        array $messages = [],
+        array $tools = [],
+        ?array $schema = null,
+        $options = null,
+        ?int $timeout = null,
+    ) {
+        return $gateway->generateTextStep(
+            $provider,
+            $model,
+            $instructions,
+            $messages,
+            $tools,
+            $schema,
+            $options,
+            $timeout,
+            new StepContext,
+        );
+    }
+
+    /**
+     * @param  array<int, mixed>  $messages
+     * @param  array<int, mixed>  $tools
+     * @param  array<string, mixed>|null  $schema
+     */
+    private function streamStep(
+        RegoloGateway $gateway,
+        string $invocationId,
+        $provider,
+        string $model,
+        ?string $instructions,
+        array $messages = [],
+        array $tools = [],
+        ?array $schema = null,
+        $options = null,
+        ?int $timeout = null,
+    ) {
+        return $gateway->generateStreamStep(
+            $invocationId,
+            $provider,
+            $model,
+            $instructions,
+            $messages,
+            $tools,
+            $schema,
+            $options,
+            $timeout,
+            new StepContext,
+        );
     }
 }

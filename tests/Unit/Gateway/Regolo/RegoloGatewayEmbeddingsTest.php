@@ -9,6 +9,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\AiServiceProvider;
+use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Orchestra\Testbench\TestCase;
@@ -192,7 +193,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
         });
     }
 
-    public function test_embed_5xx_surfaces_as_request_exception_no_retry(): void
+    public function test_embed_5xx_surfaces_as_provider_overloaded_no_retry(): void
     {
         Http::fake([
             'api.regolo.test/v1/embeddings' => Http::response(
@@ -203,7 +204,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(RequestException::class);
+        $this->expectException(ProviderOverloadedException::class);
 
         $gateway->generateEmbeddings(
             $this->makeProvider(),
@@ -280,7 +281,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
         );
     }
 
-    public function test_embed_connection_failure_surfaces_as_connection_exception(): void
+    public function test_embed_connection_failure_surfaces_as_provider_connection_exception(): void
     {
         Http::fake([
             'api.regolo.test/v1/embeddings' => fn () => throw new ConnectionException('cURL error 28: Operation timed out'),
@@ -288,7 +289,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(ConnectionException::class);
+        $this->expectException(ProviderConnectionException::class);
 
         $gateway->generateEmbeddings(
             $this->makeProvider(),

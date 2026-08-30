@@ -9,7 +9,7 @@ use Laravel\Ai\Ai;
 use Laravel\Ai\AiServiceProvider;
 use Laravel\Ai\Contracts\Gateway\EmbeddingGateway;
 use Laravel\Ai\Contracts\Gateway\RerankingGateway;
-use Laravel\Ai\Contracts\Gateway\TextGateway;
+use Laravel\Ai\Contracts\Gateway\StepTextGateway;
 use Laravel\Ai\Contracts\Providers\EmbeddingProvider;
 use Laravel\Ai\Contracts\Providers\RerankingProvider;
 use Laravel\Ai\Contracts\Providers\TextProvider;
@@ -67,7 +67,7 @@ final class ServiceProviderTest extends TestCase
         $embeddingGateway = $provider->embeddingGateway();
         $rerankingGateway = $provider->rerankingGateway();
 
-        $this->assertInstanceOf(TextGateway::class, $textGateway);
+        $this->assertInstanceOf(StepTextGateway::class, $textGateway);
         $this->assertInstanceOf(EmbeddingGateway::class, $embeddingGateway);
         $this->assertInstanceOf(RerankingGateway::class, $rerankingGateway);
         $this->assertInstanceOf(RegoloGateway::class, $textGateway);

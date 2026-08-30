@@ -6,67 +6,53 @@ namespace Padosoft\LaravelAiRegolo\Gateway\Regolo\Concerns;
 
 use Generator;
 use Illuminate\Support\Str;
-use Laravel\Ai\Gateway\TextGenerationOptions;
+use Laravel\Ai\Gateway\StepResponse;
 use Laravel\Ai\Providers\Provider;
+use Laravel\Ai\Responses\Data\Meta;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Streaming\Events\Error;
-use Laravel\Ai\Streaming\Events\StreamEnd;
+use Laravel\Ai\Streaming\Events\StreamEvent;
 use Laravel\Ai\Streaming\Events\StreamStart;
 use Laravel\Ai\Streaming\Events\TextDelta;
 use Laravel\Ai\Streaming\Events\TextEnd;
 use Laravel\Ai\Streaming\Events\TextStart;
 use Laravel\Ai\Streaming\Events\ToolCall as ToolCallEvent;
-use Laravel\Ai\Streaming\Events\ToolResult as ToolResultEvent;
 
 /**
- * Translate a Regolo Chat Completions SSE response into the SDK's
- * normalized stream-event sequence.
+ * Translate a Regolo streamed Chat Completions response into SDK stream events.
  *
- * Regolo's streaming surface mirrors OpenAI Chat Completions classic
- * (`data: {...}\n\n` framing, `choices[0].delta.content` for text
- * deltas, `choices[0].delta.tool_calls[]` for tool deltas, terminal
- * `[DONE]` sentinel, optional usage block in the final chunk when
- * `stream_options.include_usage = true` is set on the request).
+ * A 1:1 port of the upstream `Laravel\Ai\Gateway\Mistral\Concerns\HandlesTextStreaming`
+ * with only the namespace changed, which is the same relationship the previous
+ * version of this file had with the 0.8 upstream. Regolo speaks OpenAI classic
+ * Chat Completions, so the streamed shape is identical and forking the logic
+ * would only mean drifting from it.
  *
- * The trait also handles the multi-step tool loop: when the model
- * returns `finish_reason = tool_calls`, we yield one `ToolCallEvent`
- * per call, dispatch the local `Tool::handle()` for each, yield a
- * `ToolResultEvent`, then re-issue the streaming request with the
- * tool results appended to the message stack — bounded by
- * `$options->maxSteps` (defaulting to `round(count($tools) * 1.5)`
- * to match upstream Mistral behaviour).
+ * The previous version carried the multi-step tool loop as well -- it re-entered
+ * the gateway after each tool call and re-streamed. From laravel/ai 0.11 the SDK
+ * drives that, so this yields events for ONE step and returns the step response.
+ * That is why the signature lost `$tools`, `$schema`, `$options`,
+ * `$instructions`, `$messages` and `$timeout`: none of them were about
+ * streaming, they were all about looping.
  */
 trait HandlesTextStreaming
 {
-    /**
-     * Process a Chat Completions streaming response and yield Laravel stream events.
-     */
+    /** @return Generator<int, StreamEvent, mixed, StepResponse|null> */
     protected function processTextStream(
         string $invocationId,
         Provider $provider,
         string $model,
-        array $tools,
-        ?array $schema,
-        ?TextGenerationOptions $options,
         $streamBody,
-        ?string $instructions = null,
-        array $originalMessages = [],
-        int $depth = 0,
-        ?int $maxSteps = null,
-        array $priorChatMessages = [],
-        ?int $timeout = null,
     ): Generator {
-        $maxSteps ??= $options?->maxSteps;
-
         $messageId = $this->generateEventId();
         $streamStartEmitted = false;
         $textStartEmitted = false;
         $currentText = '';
+        $toolCalls = [];
         $pendingToolCalls = [];
         $usage = null;
         $finishReason = null;
+        $responseModel = $model;
 
         foreach ($this->parseServerSentEvents($streamBody) as $data) {
             if (isset($data['error'])) {
@@ -78,17 +64,14 @@ trait HandlesTextStreaming
                     time(),
                 ))->withInvocationId($invocationId);
 
-                return;
+                return null;
             }
 
             $choice = $data['choices'][0] ?? null;
 
             if (! $choice) {
                 if (isset($data['usage'])) {
-                    $usage = new Usage(
-                        $data['usage']['prompt_tokens'] ?? 0,
-                        $data['usage']['completion_tokens'] ?? 0,
-                    );
+                    $usage = $this->extractUsage($data);
                 }
 
                 continue;
@@ -98,16 +81,19 @@ trait HandlesTextStreaming
 
             if (! $streamStartEmitted) {
                 $streamStartEmitted = true;
+                $responseModel = $data['model'] ?? $model;
 
                 yield (new StreamStart(
                     $this->generateEventId(),
                     $provider->name(),
-                    $data['model'] ?? $model,
+                    $responseModel,
                     time(),
                 ))->withInvocationId($invocationId);
             }
 
-            if (isset($delta['content']) && $delta['content'] !== '') {
+            $content = $this->extractContentText($delta['content'] ?? '');
+
+            if ($content !== '') {
                 if (! $textStartEmitted) {
                     $textStartEmitted = true;
 
@@ -118,12 +104,12 @@ trait HandlesTextStreaming
                     ))->withInvocationId($invocationId);
                 }
 
-                $currentText .= $delta['content'];
+                $currentText .= $content;
 
                 yield (new TextDelta(
                     $this->generateEventId(),
                     $messageId,
-                    $delta['content'],
+                    $content,
                     time(),
                 ))->withInvocationId($invocationId);
             }
@@ -151,10 +137,7 @@ trait HandlesTextStreaming
             }
 
             if (isset($data['usage'])) {
-                $usage = new Usage(
-                    $data['usage']['prompt_tokens'] ?? 0,
-                    $data['usage']['completion_tokens'] ?? 0,
-                );
+                $usage = $this->extractUsage($data);
             }
         }
 
@@ -167,173 +150,31 @@ trait HandlesTextStreaming
         }
 
         if (filled($pendingToolCalls) && $finishReason === 'tool_calls') {
-            $mappedToolCalls = $this->mapStreamToolCalls($pendingToolCalls);
+            foreach (array_values($pendingToolCalls) as $pending) {
+                $toolCall = new ToolCall(
+                    $pending['id'] ?? '',
+                    $pending['name'] ?? '',
+                    json_decode($pending['arguments'] ?? '{}', true) ?? [],
+                    $pending['id'] ?? null,
+                );
 
-            foreach ($mappedToolCalls as $toolCall) {
+                $toolCalls[] = $toolCall;
+
                 yield (new ToolCallEvent(
                     $this->generateEventId(),
                     $toolCall,
                     time(),
                 ))->withInvocationId($invocationId);
             }
-
-            yield from $this->handleStreamingToolCalls(
-                $invocationId,
-                $provider,
-                $model,
-                $tools,
-                $schema,
-                $options,
-                $mappedToolCalls,
-                $currentText,
-                $instructions,
-                $originalMessages,
-                $depth,
-                $maxSteps,
-                $priorChatMessages,
-                $timeout,
-            );
-
-            return;
         }
 
-        yield (new StreamEnd(
-            $this->generateEventId(),
-            $this->extractFinishReason(['finish_reason' => $finishReason ?? ''])->value,
-            $usage ?? new Usage(0, 0),
-            time(),
-        ))->withInvocationId($invocationId);
-    }
-
-    /**
-     * Handle tool calls detected during streaming.
-     */
-    protected function handleStreamingToolCalls(
-        string $invocationId,
-        Provider $provider,
-        string $model,
-        array $tools,
-        ?array $schema,
-        ?TextGenerationOptions $options,
-        array $mappedToolCalls,
-        string $currentText,
-        ?string $instructions,
-        array $originalMessages,
-        int $depth,
-        ?int $maxSteps,
-        array $priorChatMessages,
-        ?int $timeout = null,
-    ): Generator {
-        $toolResults = [];
-
-        foreach ($mappedToolCalls as $toolCall) {
-            $tool = $this->findTool($toolCall->name, $tools);
-
-            if ($tool === null) {
-                continue;
-            }
-
-            $result = $this->executeTool($tool, $toolCall->arguments);
-
-            $toolResult = new ToolResult(
-                $toolCall->id,
-                $toolCall->name,
-                $toolCall->arguments,
-                $result,
-                $toolCall->resultId,
-            );
-
-            $toolResults[] = $toolResult;
-
-            yield (new ToolResultEvent(
-                $this->generateEventId(),
-                $toolResult,
-                true,
-                null,
-                time(),
-            ))->withInvocationId($invocationId);
-        }
-
-        if ($depth + 1 < ($maxSteps ?? round(count($tools) * 1.5))) {
-            $assistantMsg = ['role' => 'assistant'];
-
-            if (filled($currentText)) {
-                $assistantMsg['content'] = $currentText;
-            }
-
-            $assistantMsg['tool_calls'] = array_map(
-                fn (ToolCall $toolCall) => $this->serializeToolCallToChat($toolCall), $mappedToolCalls
-            );
-
-            $toolResultMessages = [];
-
-            foreach ($toolResults as $toolResult) {
-                $toolResultMessages[] = [
-                    'role' => 'tool',
-                    'tool_call_id' => $toolResult->resultId ?? $toolResult->id,
-                    'content' => $this->serializeToolResultOutput($toolResult->result),
-                ];
-            }
-
-            $updatedPriorMessages = [...$priorChatMessages, $assistantMsg, ...$toolResultMessages];
-
-            $chatMessages = [
-                ...$this->mapMessagesToChat($originalMessages, $instructions),
-                ...$updatedPriorMessages,
-            ];
-
-            $body = $this->applyTextOptions([
-                'model' => $model,
-                'messages' => $chatMessages,
-                'stream' => true,
-                'stream_options' => ['include_usage' => true],
-            ], $provider, $tools, $schema, $options);
-
-            $response = $this->withErrorHandling(
-                $provider->name(),
-                fn () => $this->client($provider, $timeout)
-                    ->withOptions(['stream' => true])
-                    ->post('chat/completions', $body),
-            );
-
-            yield from $this->processTextStream(
-                $invocationId,
-                $provider,
-                $model,
-                $tools,
-                $schema,
-                $options,
-                $response->getBody(),
-                $instructions,
-                $originalMessages,
-                $depth + 1,
-                $maxSteps,
-                $updatedPriorMessages,
-                $timeout,
-            );
-        } else {
-            yield (new StreamEnd(
-                $this->generateEventId(),
-                'stop',
-                new Usage(0, 0),
-                time(),
-            ))->withInvocationId($invocationId);
-        }
-    }
-
-    /**
-     * Map raw streaming tool call data to ToolCall DTOs.
-     *
-     * @return array<ToolCall>
-     */
-    protected function mapStreamToolCalls(array $toolCalls): array
-    {
-        return array_map(fn (array $toolCall) => new ToolCall(
-            $toolCall['id'] ?? '',
-            $toolCall['name'] ?? '',
-            json_decode($toolCall['arguments'] ?? '{}', true) ?? [],
-            $toolCall['id'] ?? null,
-        ), array_values($toolCalls));
+        return new StepResponse(
+            text: $currentText,
+            toolCalls: $toolCalls,
+            finishReason: $this->extractFinishReason(['finish_reason' => $finishReason ?? '']),
+            usage: $usage ?? new Usage(0, 0),
+            meta: new Meta($provider->name(), $responseModel),
+        );
     }
 
     /**

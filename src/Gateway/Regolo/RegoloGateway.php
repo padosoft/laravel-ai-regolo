@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelAiRegolo\Gateway\Regolo;
 
-use Generator;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Support\Collection;
 use Laravel\Ai\Contracts\Files\HasName;
@@ -13,7 +12,7 @@ use Laravel\Ai\Contracts\Gateway\AudioGateway;
 use Laravel\Ai\Contracts\Gateway\EmbeddingGateway;
 use Laravel\Ai\Contracts\Gateway\ImageGateway;
 use Laravel\Ai\Contracts\Gateway\RerankingGateway;
-use Laravel\Ai\Contracts\Gateway\TextGateway;
+use Laravel\Ai\Contracts\Gateway\StepTextGateway;
 use Laravel\Ai\Contracts\Gateway\TranscriptionGateway;
 use Laravel\Ai\Contracts\Providers\AudioProvider;
 use Laravel\Ai\Contracts\Providers\EmbeddingProvider;
@@ -22,8 +21,11 @@ use Laravel\Ai\Contracts\Providers\RerankingProvider;
 use Laravel\Ai\Contracts\Providers\TextProvider;
 use Laravel\Ai\Contracts\Providers\TranscriptionProvider;
 use Laravel\Ai\Gateway\Concerns\HandlesFailoverErrors;
-use Laravel\Ai\Gateway\Concerns\InvokesTools;
 use Laravel\Ai\Gateway\Concerns\ParsesServerSentEvents;
+use Laravel\Ai\Gateway\OpenAiCompatible\Concerns\MapsChatCompletionMessages;
+use Laravel\Ai\Gateway\OpenAiCompatible\Concerns\MapsChatCompletionTools;
+use Laravel\Ai\Gateway\OpenAiCompatible\Concerns\PerformsChatCompletionSteps;
+use Laravel\Ai\Gateway\StepContext;
 use Laravel\Ai\Gateway\TextGenerationOptions;
 use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\AudioResponse;
@@ -35,7 +37,6 @@ use Laravel\Ai\Responses\Data\Usage;
 use Laravel\Ai\Responses\EmbeddingsResponse;
 use Laravel\Ai\Responses\ImageResponse;
 use Laravel\Ai\Responses\RerankingResponse;
-use Laravel\Ai\Responses\TextResponse;
 use Laravel\Ai\Responses\TranscriptionResponse;
 
 /**
@@ -56,18 +57,27 @@ use Laravel\Ai\Responses\TranscriptionResponse;
  * the gateway pick up environment / config rotation without
  * re-instantiation.
  */
-final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGateway, RerankingGateway, TextGateway, TranscriptionGateway
+final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGateway, RerankingGateway, StepTextGateway, TranscriptionGateway
 {
     use Concerns\BuildsTextRequests;
     use Concerns\CreatesRegoloClient;
     use Concerns\HandlesTextStreaming;
     use Concerns\MapsAttachments;
-    use Concerns\MapsMessages;
-    use Concerns\MapsTools;
     use Concerns\ParsesTextResponses;
     use HandlesFailoverErrors;
-    use InvokesTools;
+
+    // The message and tool mappers now come from the SDK's shared
+    // OpenAI-compatible concerns rather than being carried here. Regolo speaks
+    // that dialect, and 0.11 made the upstream versions available, so keeping
+    // private copies would only mean drifting from them.
+    use MapsChatCompletionMessages;
+    use MapsChatCompletionTools;
     use ParsesServerSentEvents;
+
+    // The multi-step tool loop lives in the SDK from 0.11 onward. This gateway
+    // performs ONE step and hands the result back; it no longer executes tools
+    // or decides when to stop.
+    use PerformsChatCompletionSteps;
 
     /**
      * Default HTTP timeout (seconds) applied to `generateImage` when
@@ -83,100 +93,7 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
 
     public function __construct(protected Dispatcher $events)
     {
-        $this->initializeToolCallbacks();
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function generateText(
-        TextProvider $provider,
-        string $model,
-        ?string $instructions,
-        array $messages = [],
-        array $tools = [],
-        ?array $schema = null,
-        ?TextGenerationOptions $options = null,
-        ?int $timeout = null,
-    ): TextResponse {
-        $body = $this->buildTextRequestBody(
-            $provider,
-            $model,
-            $instructions,
-            $messages,
-            $tools,
-            $schema,
-            $options,
-        );
-
-        $response = $this->withErrorHandling(
-            $provider->name(),
-            fn () => $this->client($provider, $timeout)->post('chat/completions', $body),
-        );
-
-        $data = $response->json();
-
-        $this->validateTextResponse($data);
-
-        return $this->parseTextResponse(
-            $data,
-            $provider,
-            filled($schema),
-            $tools,
-            $schema,
-            $options,
-            $instructions,
-            $messages,
-            $timeout,
-        );
-    }
-
-    /**
-     * {@inheritdoc}
-     */
-    public function streamText(
-        string $invocationId,
-        TextProvider $provider,
-        string $model,
-        ?string $instructions,
-        array $messages = [],
-        array $tools = [],
-        ?array $schema = null,
-        ?TextGenerationOptions $options = null,
-        ?int $timeout = null,
-    ): Generator {
-        $body = $this->buildTextRequestBody(
-            $provider,
-            $model,
-            $instructions,
-            $messages,
-            $tools,
-            $schema,
-            $options,
-        );
-
-        $body['stream'] = true;
-        $body['stream_options'] = ['include_usage' => true];
-
-        $response = $this->withErrorHandling(
-            $provider->name(),
-            fn () => $this->client($provider, $timeout)
-                ->withOptions(['stream' => true])
-                ->post('chat/completions', $body),
-        );
-
-        yield from $this->processTextStream(
-            $invocationId,
-            $provider,
-            $model,
-            $tools,
-            $schema,
-            $options,
-            $response->getBody(),
-            $instructions,
-            $messages,
-            timeout: $timeout,
-        );
+        //
     }
 
     /**
@@ -469,6 +386,52 @@ final class RegoloGateway implements AudioGateway, EmbeddingGateway, ImageGatewa
             new Usage($inputTokens, $completionTokens),
             new Meta($provider->name(), $model),
         );
+    }
+
+    /**
+     * Build the request body for the current text generation step.
+     *
+     * This is the entire text surface now. `generateTextStep()` and
+     * `generateStreamStep()` come from PerformsChatCompletionSteps: from
+     * laravel/ai 0.11 the SDK owns the multi-step tool loop, so a gateway
+     * describes ONE request and returns what came back. It no longer executes
+     * tools, counts steps, or decides when a conversation is finished --
+     * behaviour this class used to carry and that is now deleted rather than
+     * ported, because two implementations of a tool loop is one too many.
+     *
+     * @param  array<int, mixed>  $messages
+     * @param  array<int, mixed>  $tools
+     * @param  array<string, mixed>|null  $schema
+     * @return array<string, mixed>
+     */
+    protected function buildStepBody(
+        TextProvider $provider,
+        string $model,
+        ?string $instructions,
+        array $messages,
+        array $tools,
+        ?array $schema,
+        ?TextGenerationOptions $options,
+        StepContext $stepContext,
+    ): array {
+        return $this->buildTextRequestBody($provider, $model, $instructions, $messages, $tools, $schema, $options);
+    }
+
+    /**
+     * Ask Regolo to report token usage on the final streamed chunk.
+     *
+     * Regolo follows the OpenAI classic contract here, where usage is omitted
+     * from a stream unless it is requested.
+     *
+     * Always returns a value: Regolo has no case where usage should be
+     * withheld, so the nullable half of the parent's return type is not
+     * reachable here. Narrowing is allowed by covariance.
+     *
+     * @return array<string, mixed>
+     */
+    protected function streamOptions(Provider $provider): array
+    {
+        return ['include_usage' => true];
     }
 
     /**
