@@ -193,7 +193,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
         });
     }
 
-    public function test_embed_5xx_surfaces_as_request_exception_no_retry(): void
+    public function test_embed_5xx_surfaces_as_provider_overloaded_no_retry(): void
     {
         Http::fake([
             'api.regolo.test/v1/embeddings' => Http::response(
@@ -281,7 +281,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
         );
     }
 
-    public function test_embed_connection_failure_surfaces_as_connection_exception(): void
+    public function test_embed_connection_failure_surfaces_as_provider_connection_exception(): void
     {
         Http::fake([
             'api.regolo.test/v1/embeddings' => fn () => throw new ConnectionException('cURL error 28: Operation timed out'),

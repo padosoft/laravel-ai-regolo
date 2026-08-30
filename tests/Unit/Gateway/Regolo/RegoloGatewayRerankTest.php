@@ -270,7 +270,7 @@ final class RegoloGatewayRerankTest extends TestCase
         $this->assertSame('zero', $response->results[1]->document);
     }
 
-    public function test_rerank_5xx_surfaces_as_request_exception_no_retry(): void
+    public function test_rerank_5xx_surfaces_as_provider_overloaded_no_retry(): void
     {
         Http::fake([
             'api.regolo.test/v1/rerank' => Http::response(

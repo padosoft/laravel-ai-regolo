@@ -220,12 +220,18 @@ final class RegoloGatewayChatTest extends TestCase
 
     /**
      * SDK behaviour: HandlesFailoverErrors does NOT retry on plain 5xx.
-     * 503 specifically maps to ProviderOverloadedException; other 5xx
-     * surface as RequestException. This test pins the documented
-     * non-retry contract — callers wanting retries layer Http::retry()
-     * via a custom client decorator.
+     *
+     * From laravel/ai 0.11 every 5xx maps to ProviderOverloadedException,
+     * not only 503 — the SDK now wraps provider failures in typed exceptions
+     * instead of letting the raw Http client one through. A 4xx still
+     * surfaces raw, deliberately: a 400 is a client error, and collapsing the
+     * two would lose the distinction that tells a caller whether retrying
+     * could ever help.
+     *
+     * This test pins the non-retry contract — callers wanting retries layer
+     * Http::retry() via a custom client decorator.
      */
-    public function test_chat_5xx_surfaces_as_request_exception_no_retry(): void
+    public function test_chat_5xx_surfaces_as_provider_overloaded_no_retry(): void
     {
         Http::fake([
             'api.regolo.test/v1/chat/completions' => Http::response(
@@ -350,7 +356,7 @@ final class RegoloGatewayChatTest extends TestCase
         );
     }
 
-    public function test_chat_connection_failure_surfaces_as_connection_exception(): void
+    public function test_chat_connection_failure_surfaces_as_provider_connection_exception(): void
     {
         Http::fake([
             'api.regolo.test/v1/chat/completions' => fn () => throw new ConnectionException('cURL error 28: Operation timed out'),
