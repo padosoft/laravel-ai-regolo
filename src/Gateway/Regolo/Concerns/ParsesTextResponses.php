@@ -4,41 +4,40 @@ declare(strict_types=1);
 
 namespace Padosoft\LaravelAiRegolo\Gateway\Regolo\Concerns;
 
-use Illuminate\Support\Collection;
-use Laravel\Ai\Contracts\Tool;
 use Laravel\Ai\Exceptions\AiException;
-use Laravel\Ai\Gateway\TextGenerationOptions;
-use Laravel\Ai\Messages\AssistantMessage;
-use Laravel\Ai\Messages\ToolResultMessage;
+use Laravel\Ai\Gateway\Concerns\DecodesStructuredOutput;
+use Laravel\Ai\Gateway\StepResponse;
 use Laravel\Ai\Providers\Provider;
 use Laravel\Ai\Responses\Data\FinishReason;
 use Laravel\Ai\Responses\Data\Meta;
-use Laravel\Ai\Responses\Data\Step;
 use Laravel\Ai\Responses\Data\ToolCall;
-use Laravel\Ai\Responses\Data\ToolResult;
 use Laravel\Ai\Responses\Data\Usage;
-use Laravel\Ai\Responses\StructuredTextResponse;
-use Laravel\Ai\Responses\TextResponse;
 
 /**
- * Parse a Regolo Chat Completions response into the SDK's normalized
- * TextResponse / StructuredTextResponse DTOs and drive the multi-step
- * tool loop for non-streaming requests.
+ * Parse one Regolo Chat Completions response into a single step.
  *
- * Mirrors upstream Mistral / DeepSeek / Groq / OpenRouter parsing —
- * Regolo's response shape is OpenAI Chat Completions classic
- * (`choices[0].message`, `usage.prompt_tokens` / `usage.completion_tokens`,
- * `choices[0].finish_reason ∈ {stop, tool_calls, length, content_filter}`).
+ * This trait used to run the whole conversation: it counted steps against
+ * `maxSteps`, executed tool calls, fed the results back in and recursed.
+ * From laravel/ai 0.11 the SDK owns that loop, so all of it is deleted
+ * rather than ported — a gateway that also loops is a second implementation
+ * of the same policy, and the two would disagree the first time the SDK
+ * changed how it decides a conversation is finished.
  *
- * Tool-loop bound: same `round(count($tools) * 1.5)` default as Mistral
- * unless overridden by `$options->maxSteps`. The SDK enforces this via
- * `$steps->count() < $maxSteps` — once exceeded, parsing returns
- * whatever the last step produced rather than recursing further.
+ * What remains is the part that is genuinely Regolo's: turning its response
+ * shape — OpenAI Chat Completions classic — into the SDK's.
  */
 trait ParsesTextResponses
 {
+    use DecodesStructuredOutput;
+
     /**
-     * Validate the Regolo response data.
+     * Reject an error envelope before it is read as a result.
+     *
+     * A JSON body is not the same thing as a JSON answer: an error comes back
+     * with a perfectly valid structure, and parsing it as a completion would
+     * produce an empty assistant turn instead of a failure the caller can see.
+     *
+     * @param  array<string, mixed>  $data
      *
      * @throws AiException
      */
@@ -54,256 +53,61 @@ trait ParsesTextResponses
     }
 
     /**
-     * Parse the Regolo response data into a TextResponse.
+     * Parse the response data into a single step response.
+     *
+     * @param  array<string, mixed>  $data
      */
     protected function parseTextResponse(
         array $data,
         Provider $provider,
         bool $structured,
-        array $tools = [],
-        ?array $schema = null,
-        ?TextGenerationOptions $options = null,
-        ?string $instructions = null,
-        array $originalMessages = [],
-        ?int $timeout = null,
-    ): TextResponse {
-        return $this->processResponse(
-            $data,
-            $provider,
-            $structured,
-            $tools,
-            $schema,
-            new Collection,
-            new Collection,
-            instructions: $instructions,
-            originalMessages: $originalMessages,
-            maxSteps: $options?->maxSteps,
-            options: $options,
-            timeout: $timeout,
-        );
-    }
-
-    /**
-     * Process a single response, handling tool loops recursively.
-     */
-    protected function processResponse(
-        array $data,
-        Provider $provider,
-        bool $structured,
-        array $tools,
-        ?array $schema,
-        Collection $steps,
-        Collection $messages,
-        ?string $instructions = null,
-        array $originalMessages = [],
-        int $depth = 0,
-        ?int $maxSteps = null,
-        ?TextGenerationOptions $options = null,
-        ?int $timeout = null,
-    ): TextResponse {
+    ): StepResponse {
         $choice = $data['choices'][0] ?? [];
         $message = $choice['message'] ?? [];
         $model = $data['model'] ?? '';
 
-        $text = $message['content'] ?? '';
-        $rawToolCalls = $message['tool_calls'] ?? [];
-        $usage = $this->extractUsage($data);
-        $finishReason = $this->extractFinishReason($choice);
+        $text = $this->extractContentText($message['content'] ?? '');
 
-        $mappedToolCalls = array_map(fn (array $toolCall) => new ToolCall(
-            $toolCall['id'] ?? '',
-            $toolCall['function']['name'] ?? '',
-            json_decode($toolCall['function']['arguments'] ?? '{}', true) ?? [],
-            $toolCall['id'] ?? null,
-        ), $rawToolCalls);
-
-        $step = new Step(
-            $text,
-            $mappedToolCalls,
-            [],
-            $finishReason,
-            $usage,
-            new Meta($provider->name(), $model),
+        $toolCalls = array_map(
+            fn (array $toolCall): ToolCall => new ToolCall(
+                $toolCall['id'] ?? '',
+                $toolCall['function']['name'] ?? '',
+                json_decode($toolCall['function']['arguments'] ?? '{}', true) ?? [],
+                $toolCall['id'] ?? null,
+            ),
+            $message['tool_calls'] ?? [],
         );
 
-        $steps->push($step);
-
-        $assistantMessage = new AssistantMessage($text, collect($mappedToolCalls));
-
-        $messages->push($assistantMessage);
-
-        if ($finishReason === FinishReason::ToolCalls &&
-            filled($mappedToolCalls) &&
-            $steps->count() < ($maxSteps ?? round(count($tools) * 1.5))) {
-            $toolResults = $this->executeToolCalls($mappedToolCalls, $tools);
-
-            $steps->pop();
-
-            $steps->push(new Step(
-                $text,
-                $mappedToolCalls,
-                $toolResults,
-                $finishReason,
-                $usage,
-                new Meta($provider->name(), $model),
-            ));
-
-            $toolResultMessage = new ToolResultMessage(collect($toolResults));
-
-            $messages->push($toolResultMessage);
-
-            return $this->continueWithToolResults(
-                $model,
-                $provider,
-                $structured,
-                $tools,
-                $schema,
-                $steps,
-                $messages,
-                $instructions,
-                $originalMessages,
-                $depth + 1,
-                $maxSteps,
-                $options,
-                $timeout,
-            );
-        }
-
-        $allToolCalls = $steps->flatMap(fn (Step $s) => $s->toolCalls);
-        $allToolResults = $steps->flatMap(fn (Step $s) => $s->toolResults);
-
-        if ($structured) {
-            $structuredData = json_decode($text, true) ?? [];
-
-            return (new StructuredTextResponse(
-                $structuredData,
-                $text,
-                $this->combineUsage($steps),
-                new Meta($provider->name(), $model),
-            ))->withToolCallsAndResults(
-                toolCalls: $allToolCalls,
-                toolResults: $allToolResults,
-            )->withSteps($steps);
-        }
-
-        return (new TextResponse(
-            $text,
-            $this->combineUsage($steps),
-            new Meta($provider->name(), $model),
-        ))->withMessages($messages)->withSteps($steps);
+        return new StepResponse(
+            text: $text,
+            toolCalls: $toolCalls,
+            finishReason: $this->extractFinishReason($choice),
+            usage: $this->extractUsage($data),
+            meta: new Meta($provider->name(), $model),
+            structured: $structured ? $this->decodeStructuredOutput($text) : null,
+        );
     }
 
     /**
-     * Execute tool calls and return tool results.
+     * Extract the text from a message content value.
      *
-     * @param  array<ToolCall>  $toolCalls
-     * @param  array<Tool>  $tools
-     * @return array<ToolResult>
+     * Regolo returns either a plain string or a list of content chunks,
+     * depending on the model.
      */
-    protected function executeToolCalls(array $toolCalls, array $tools): array
+    protected function extractContentText(mixed $content): string
     {
-        $results = [];
-
-        foreach ($toolCalls as $toolCall) {
-            $tool = $this->findTool($toolCall->name, $tools);
-
-            if ($tool === null) {
-                continue;
-            }
-
-            $result = $this->executeTool($tool, $toolCall->arguments);
-
-            $results[] = new ToolResult(
-                $toolCall->id,
-                $toolCall->name,
-                $toolCall->arguments,
-                $result,
-                $toolCall->resultId,
-            );
+        if (! is_array($content)) {
+            return (string) $content;
         }
 
-        return $results;
+        return implode('', array_map(
+            fn (mixed $chunk): string => is_array($chunk) ? (string) ($chunk['text'] ?? '') : (string) $chunk,
+            $content,
+        ));
     }
 
     /**
-     * Continue the conversation with tool results by making a follow-up request.
-     */
-    protected function continueWithToolResults(
-        string $model,
-        Provider $provider,
-        bool $structured,
-        array $tools,
-        ?array $schema,
-        Collection $steps,
-        Collection $messages,
-        ?string $instructions,
-        array $originalMessages,
-        int $depth,
-        ?int $maxSteps,
-        ?TextGenerationOptions $options = null,
-        ?int $timeout = null,
-    ): TextResponse {
-        $chatMessages = $this->mapMessagesToChat($originalMessages, $instructions);
-
-        foreach ($messages as $msg) {
-            if ($msg instanceof AssistantMessage) {
-                $mapped = ['role' => 'assistant'];
-
-                if (filled($msg->content)) {
-                    $mapped['content'] = $msg->content;
-                }
-
-                if ($msg->toolCalls->isNotEmpty()) {
-                    $mapped['tool_calls'] = $msg->toolCalls->map(
-                        fn (ToolCall $toolCall) => $this->serializeToolCallToChat($toolCall)
-                    )->all();
-                }
-
-                $chatMessages[] = $mapped;
-            } elseif ($msg instanceof ToolResultMessage) {
-                foreach ($msg->toolResults as $toolResult) {
-                    $chatMessages[] = [
-                        'role' => 'tool',
-                        'tool_call_id' => $toolResult->resultId ?? $toolResult->id,
-                        'content' => $this->serializeToolResultOutput($toolResult->result),
-                    ];
-                }
-            }
-        }
-
-        $body = $this->applyTextOptions([
-            'model' => $model,
-            'messages' => $chatMessages,
-        ], $provider, $tools, $schema, $options);
-
-        $response = $this->withErrorHandling(
-            $provider->name(),
-            fn () => $this->client($provider, $timeout)->post('chat/completions', $body),
-        );
-
-        $data = $response->json();
-
-        $this->validateTextResponse($data);
-
-        return $this->processResponse(
-            $data,
-            $provider,
-            $structured,
-            $tools,
-            $schema,
-            $steps,
-            $messages,
-            $instructions,
-            $originalMessages,
-            $depth,
-            $maxSteps,
-            $options,
-            $timeout,
-        );
-    }
-
-    /**
-     * Extract usage data from the response.
+     * @param  array<string, mixed>  $data
      */
     protected function extractUsage(array $data): Usage
     {
@@ -316,7 +120,7 @@ trait ParsesTextResponses
     }
 
     /**
-     * Extract and map the finish reason from the response.
+     * @param  array<string, mixed>  $choice
      */
     protected function extractFinishReason(array $choice): FinishReason
     {
@@ -327,16 +131,5 @@ trait ParsesTextResponses
             'content_filter' => FinishReason::ContentFilter,
             default => FinishReason::Unknown,
         };
-    }
-
-    /**
-     * Combine usage across all steps.
-     */
-    protected function combineUsage(Collection $steps): Usage
-    {
-        return $steps->reduce(
-            fn (Usage $carry, Step $step) => $carry->add($step->usage),
-            new Usage(0, 0)
-        );
     }
 }

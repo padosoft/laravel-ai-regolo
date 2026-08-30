@@ -9,7 +9,7 @@ use Laravel\Ai\Contracts\Gateway\AudioGateway;
 use Laravel\Ai\Contracts\Gateway\EmbeddingGateway;
 use Laravel\Ai\Contracts\Gateway\ImageGateway;
 use Laravel\Ai\Contracts\Gateway\RerankingGateway;
-use Laravel\Ai\Contracts\Gateway\TextGateway;
+use Laravel\Ai\Contracts\Gateway\StepTextGateway;
 use Laravel\Ai\Contracts\Gateway\TranscriptionGateway;
 use Laravel\Ai\Contracts\Providers\AudioProvider;
 use Laravel\Ai\Contracts\Providers\EmbeddingProvider;
@@ -102,7 +102,7 @@ final class RegoloProvider extends Provider implements AudioProvider, EmbeddingP
         ];
     }
 
-    public function textGateway(): TextGateway
+    public function textGateway(): StepTextGateway
     {
         return $this->textGateway ??= $this->regoloGateway();
     }

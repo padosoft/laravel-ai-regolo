@@ -9,6 +9,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Http;
 use Laravel\Ai\AiServiceProvider;
+use Laravel\Ai\Exceptions\ProviderConnectionException;
 use Laravel\Ai\Exceptions\ProviderOverloadedException;
 use Laravel\Ai\Exceptions\RateLimitedException;
 use Orchestra\Testbench\TestCase;
@@ -203,7 +204,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(RequestException::class);
+        $this->expectException(ProviderOverloadedException::class);
 
         $gateway->generateEmbeddings(
             $this->makeProvider(),
@@ -288,7 +289,7 @@ final class RegoloGatewayEmbeddingsTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(ConnectionException::class);
+        $this->expectException(ProviderConnectionException::class);
 
         $gateway->generateEmbeddings(
             $this->makeProvider(),

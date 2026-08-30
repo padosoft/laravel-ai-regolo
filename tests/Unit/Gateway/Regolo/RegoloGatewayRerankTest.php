@@ -281,7 +281,7 @@ final class RegoloGatewayRerankTest extends TestCase
 
         $gateway = new RegoloGateway($this->app->make('events'));
 
-        $this->expectException(RequestException::class);
+        $this->expectException(ProviderOverloadedException::class);
 
         $gateway->rerank(
             $this->makeProvider(),

@@ -53,7 +53,10 @@ trait BuildsTextRequests
         ?TextGenerationOptions $options,
     ): array {
         if (filled($tools)) {
-            $mappedTools = $this->mapTools($tools);
+            // 0.11's shared mapper needs the provider, so it can emit the
+            // provider-native shape for built-in tools rather than only
+            // function tools.
+            $mappedTools = $this->mapTools($tools, $provider);
 
             if (filled($mappedTools)) {
                 $body['tool_choice'] = 'auto';
